@@ -1,8 +1,14 @@
 # Third-party notices
 
+## zMD
+
+Hashlight is derived from [zMD](https://github.com/umzcio/zMD), Copyright (c) 2025–2026 Zachary
+Rossmiller (umzcio), released under the MIT License. Its notice is kept in
+[LICENSE.md](LICENSE.md).
+
 ## Tinted Theming schemes
 
-zMD bundles Base16 color-scheme data from
+Hashlight bundles Base16 color-scheme data from
 [`tinted-theming/schemes`](https://github.com/tinted-theming/schemes), revision
 `50f6e3b93a8f62db9d839f8b79a709c1bbdaac53`.
 

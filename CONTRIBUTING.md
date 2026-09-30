@@ -1,35 +1,33 @@
-# Contributing to zMD Viewer
+# Contributing to Hashlight
 
-Thanks for your interest in zMD Viewer — the read-only edition of zMD, a native
-SwiftUI/AppKit markdown viewer for macOS. It lives on the `viewer` branch.
-Contributions of all kinds are welcome: bug reports, fixes, features, and
-documentation. Keep it a viewer: nothing may write to a user's Markdown files.
+Thanks for your interest in Hashlight — a native SwiftUI/AppKit markdown viewer
+for macOS. Contributions of all kinds are welcome: bug reports, fixes, features,
+and documentation. Keep it a viewer: nothing may write to a user's Markdown files.
 
 ## Getting started
 
 **Requirements:** macOS 13+, Xcode 27+.
 
 ```bash
-git clone https://github.com/ib0ndar/zMD.git
-cd zMD
-git switch viewer
-open zMD.xcodeproj        # then ⌘R
+git clone https://github.com/ib0ndar/Hashlight.git
+cd Hashlight
+open Hashlight.xcodeproj  # then ⌘R
 ```
 
 Or from the command line:
 
 ```bash
 # Build
-./scripts/xcodebuild-zmd.sh -configuration Debug build
+./scripts/xcodebuild-hashlight.sh -configuration Debug build
 
 # Run the tests
-./scripts/xcodebuild-zmd.sh -configuration Debug test \
+./scripts/xcodebuild-hashlight.sh -configuration Debug test \
   -destination 'platform=macOS'
 ```
 
 The wrapper keeps build products in `build/Xcode/` and unregisters development app/Quick Look
 copies before and after the build. Do not create per-run `/tmp/...-derived` directories. Use
-`ZMD_KEEP_REGISTRATION=1` only while deliberately testing Finder Quick Look, then run
+`HASHLIGHT_KEEP_REGISTRATION=1` only while deliberately testing Finder Quick Look, then run
 `./scripts/manage-dev-registrations.sh unregister`.
 
 There are no external dependencies — no SwiftPM packages, no CocoaPods. The
@@ -64,7 +62,7 @@ Rendering and export must stay in sync:
 3. Add preview rendering in `MarkdownTextView`'s `renderElement()` dispatch.
 4. Add DOCX/print handling in `ExportManager` / `PrintManager` if the
    element needs backend-specific output.
-5. Add a test in `zMDTests/` covering the new syntax.
+5. Add a test in `HashlightTests/` covering the new syntax.
 
 ## Code conventions
 
@@ -73,7 +71,7 @@ Rendering and export must stay in sync:
 - **Deployment target is macOS 13.** No macOS 14+ APIs without an
   `if #available` check. Notably, `onChange(of:)` must use the
   one-parameter `{ _ in }` form — the zero-parameter form is macOS 14+.
-  Only the `zMDTests` target deploys to macOS 14.0, because Xcode's XCTest
+  Only the `HashlightTests` target deploys to macOS 14.0, because Xcode's XCTest
   libraries are built for 14.0; the app and Quick Look extension stay at 13.0.
 - Singletons (`DocumentManager.shared`, etc.) are observed with
   `@ObservedObject`, not `@StateObject`, since they are pre-existing shared
@@ -86,8 +84,8 @@ Rendering and export must stay in sync:
 1. Fork and create a topic branch off `master`.
 2. Keep commits focused; explain *why* in the body when it isn't obvious.
 3. Before opening a PR:
-   - `./scripts/xcodebuild-zmd.sh … build` succeeds with no new warnings
-   - `./scripts/xcodebuild-zmd.sh … test` passes
+   - `./scripts/xcodebuild-hashlight.sh … build` succeeds with no new warnings
+   - `./scripts/xcodebuild-hashlight.sh … test` passes
    - If you touched rendering or export, manually spot-check a markdown
      fixture in preview **and** at least one export format (they share the
      parser, but backend-specific bugs are the most common regression).
@@ -96,10 +94,10 @@ Rendering and export must stay in sync:
 
 ## Reporting bugs
 
-Open an issue at <https://github.com/ib0ndar/zMD/issues> with:
+Open an issue at <https://github.com/ib0ndar/Hashlight/issues> with:
 
-- macOS version and zMD version (zMD → About, or
-  `defaults read /Applications/zMD.app/Contents/Info.plist CFBundleShortVersionString`)
+- macOS version and Hashlight version (Hashlight → Settings → About, or
+  `defaults read /Applications/Hashlight.app/Contents/Info.plist CFBundleShortVersionString`)
 - Steps to reproduce — a minimal markdown snippet that triggers the bug is
   worth a thousand words
 - What you expected vs. what happened

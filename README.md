@@ -1,36 +1,36 @@
 <p align="center">
-  <img src="img/zMarkdown.png" alt="zMD Viewer" />
+  <img src="Hashlight/Assets.xcassets/AppIcon.appiconset/512.png" width="160" alt="Hashlight" />
 </p>
 
-<p align="center">
-  <img src="https://img.shields.io/badge/zMD_Viewer-Native_Markdown_Viewer-c8a96e?style=for-the-badge&labelColor=080a0f" alt="zMD Viewer" />
-</p>
+<h1 align="center">Hashlight</h1>
 
 <p align="center">
   <strong>Native macOS Markdown viewer</strong><br/>
   A lightweight, Typora-inspired reader with tabs, an outline sidebar, folder search, and full export support. It never changes your files.<br/><br/>
-  <a href="https://github.com/ib0ndar/zMD/tree/viewer">Source</a> · <a href="https://github.com/ib0ndar/zMD/issues">Issues</a> · <a href="https://github.com/ib0ndar/zMD/blob/viewer/CLAUDE.md">Developer Guide</a>
+  <a href="https://github.com/ib0ndar/Hashlight/issues">Issues</a> · <a href="https://github.com/ib0ndar/Hashlight/blob/main/CLAUDE.md">Developer Guide</a>
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/version-1.0.0-c8a96e?style=flat-square" alt="Version 1.0.0" />
+  <img src="https://img.shields.io/badge/version-1.0.0-f5a524?style=flat-square" alt="Version 1.0.0" />
   <img src="https://img.shields.io/badge/platform-macOS_13%2B-4a9eff?style=flat-square" alt="macOS 13+" />
   <img src="https://img.shields.io/badge/stack-SwiftUI%20%7C%20AppKit%20%7C%20NSTextView-34d399?style=flat-square" alt="Stack" />
+  <a href="https://github.com/ib0ndar/Hashlight/actions/workflows/ci.yml"><img src="https://github.com/ib0ndar/Hashlight/actions/workflows/ci.yml/badge.svg?branch=main" alt="CI" /></a>
 </p>
 
 ---
 
 ## Origin
 
-zMD Viewer is the read-only edition of [zMD](https://github.com/ib0ndar/zMD), a native macOS
-Markdown editor and viewer. It keeps zMD's renderer, navigation and exports, and removes
-everything that edits or writes a document: the source editor, split view, saving, find &
-replace, and the prompts that came with unsaved changes. Open a file and it renders instantly;
-when another app changes the file, the tab follows along.
+Hashlight is a Markdown reader for macOS. Open a file and it renders instantly; when another app
+changes the file, the tab follows along without asking. It reads and exports, and never writes to
+your Markdown: there is no editor, no saving, and nothing to confirm when you close a tab or quit.
 
 It's a native SwiftUI app built around Apple's `NSTextView` rather than a web view — no
-Electron, no Tauri. It lives on the `viewer` branch of the zMD repository, has its own app and
-bundle identity, and installs next to zMD.
+Electron, no Tauri.
+
+Hashlight grew out of [zMD](https://github.com/umzcio/zMD) by Zachary Rossmiller, by way of zMD
+Viewer, a read-only edition of [the ib0ndar/zMD fork](https://github.com/ib0ndar/zMD). It keeps
+zMD's renderer, navigation, and exports; the editor, the updater, and zMD's history stay behind.
 
 ---
 
@@ -117,21 +117,19 @@ Open .md --> Rendered preview (reloads when the file changes) --> Export PDF/HTM
 
 ## Quick Start
 
-zMD Viewer has no published releases and no updater: build it from source.
+There are no published releases yet, and Hashlight has no updater: build it from source.
 
 ### Build from Source
 
 ```bash
-git clone https://github.com/ib0ndar/zMD.git
-cd zMD
-git switch viewer
-open zMD.xcodeproj
+git clone https://github.com/ib0ndar/Hashlight.git
+cd Hashlight
+open Hashlight.xcodeproj
 ```
 
-Press `⌘R` in Xcode to build and run. The Xcode target and scheme are still called `zMD`; the
-product is `zMD Viewer.app`.
+Press `⌘R` in Xcode to build and run.
 
-For command-line builds and tests, use `./scripts/xcodebuild-zmd.sh` instead of invoking
+For command-line builds and tests, use `./scripts/xcodebuild-hashlight.sh` instead of invoking
 `xcodebuild` directly. Debug builds have isolated app and Quick Look bundle IDs; when you finish
 an Xcode GUI development session, run `./scripts/manage-dev-registrations.sh unregister` to
 remove the development registrations without deleting the build.
@@ -144,17 +142,16 @@ remove the development registrations without deleting the build.
 ./scripts/build-dmg.sh
 ```
 
-Produces `build/zMD-Viewer.dmg` with the drag-to-Applications installer layout. The image is
+Produces `build/Hashlight.dmg` with the drag-to-Applications installer layout. The image is
 ad-hoc signed and not notarized, so the first launch needs right-click → Open (or System
 Settings → Privacy & Security → Open Anyway).
 
 ### Next to zMD
 
-zMD Viewer (`com.zmd.viewer`) and zMD (`com.zmd.app`) are separate apps with separate settings;
-the viewer starts with default settings and imports nothing from zMD. With both installed, both
-offer to open Markdown files and both ship a Quick Look extension. Finder uses one Quick Look
-extension for Markdown at a time; switch it in System Settings → General → Login Items &
-Extensions → Quick Look.
+Hashlight (`io.github.ib0ndar.hashlight`) has its own settings and imports nothing from zMD or zMD
+Viewer. With more than one of them installed, each offers to open Markdown files and each ships a
+Quick Look extension. Finder uses one Markdown Quick Look extension at a time; switch it in System
+Settings → General → Login Items & Extensions → Quick Look.
 
 ---
 
@@ -181,7 +178,9 @@ Extensions → Quick Look.
 
 ## License
 
-[MIT](LICENSE.md). Want to contribute? See [CONTRIBUTING.md](CONTRIBUTING.md).
+[MIT](LICENSE.md). Hashlight keeps zMD's MIT notice (Zachary Rossmiller) alongside its own; bundled
+third-party data is listed in [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md). Want to
+contribute? See [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ---
 

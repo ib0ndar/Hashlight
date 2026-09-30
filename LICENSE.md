@@ -1,6 +1,7 @@
 # MIT License
 
 Copyright (c) 2025–2026 Zachary Rossmiller (umzcio)
+Copyright (c) 2026 Ivan Bondar
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
@@ -22,5 +23,5 @@ SOFTWARE.
 
 ---
 
-*Not a license condition, just a request: if you ship zMD (or a fork of it)
-commercially, drop me a line — I'd love to hear about it.*
+*From zMD's author, Zachary Rossmiller — not a license condition, just a request: if you ship
+zMD (or a fork of it) commercially, drop me a line — I'd love to hear about it.*

@@ -88,8 +88,8 @@ tmp/
 
 *.profraw
 
-# local docs — not published
-docs/*
+# Local scratch output: investigation notes, screenshots, and temporary files
+artifacts/
 
 # Agent tooling (local skill installs — see npx skills)
 .agents/
