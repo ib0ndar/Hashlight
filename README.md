@@ -97,6 +97,7 @@ Open .md --> Rendered preview (reloads when the file changes) --> Export PDF/HTM
 - **Themes** — System / Light / Dark application appearance, with separate drop-down menus for 102 light and 249 dark Base16 preview themes
 - **Preview fonts** — independently select an installed proportional font for Markdown text and a monospaced font for code and commands
 - **Adaptive icon** — a Liquid Glass `#` lit by an amber spark; on macOS 26 it follows the system's icon style (Frost by default, Ember in dark, plus Clear and Tinted)
+- **Dock icon** — keep the system's choice or always show Frost or Ember in the Dock and app switcher (Settings → Appearance → Icon)
 
 ---
 
@@ -182,7 +183,9 @@ Settings → General → Login Items & Extensions → Quick Look.
 The official icon and brand package live in [`design/`](design/); start with
 [`design/BRIEF.md`](design/BRIEF.md). The app compiles `Hashlight/Hashlight.icon`, an Icon Composer
 bundle: macOS 26 renders it with the system's icon style, and Xcode generates a flattened Frost
-fallback for macOS 13–15. `design/icon/Hashlight-Frost-1024.png` is the canonical marketing image.
+fallback for macOS 13–15. Settings → Appearance → Icon can instead pin the running app's Dock icon
+to Frost or Ember, using the designer's `.icns` renditions; Finder always shows the bundle icon.
+`design/icon/Hashlight-Frost-1024.png` is the canonical marketing image.
 
 ---
 

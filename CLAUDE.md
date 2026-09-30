@@ -58,7 +58,8 @@ The app uses SwiftUI's `@StateObject` / `@EnvironmentObject` pattern for central
   - Watches each open file (`FileWatcher`): an external change reloads the tab silently; a deleted file asks before its tab closes
   - Holds the find-bar state; the preview computes the matches in its rendered text and reports their count
   - Injected into view hierarchy via `.environmentObject()` at app root
-- **SettingsManager** (`SettingsManager.swift`): Persists application appearance, separate light/dark preview themes, preview fonts, layout, zoom, and the versioned Markdown table-column configuration. Preview themes are bundled Base16 palettes (`PreviewTheme.swift`); font menus are derived from installed proportional and monospaced families (`PreviewFont.swift`).
+- **SettingsManager** (`SettingsManager.swift`): Persists application appearance, the Dock icon choice, separate light/dark preview themes, preview fonts, layout, zoom, and the versioned Markdown table-column configuration. Preview themes are bundled Base16 palettes (`PreviewTheme.swift`); font menus are derived from installed proportional and monospaced families (`PreviewFont.swift`).
+- **DockIconController** (`DockIconController.swift`): Applies the Dock icon setting (System / Frost / Ember) to `NSApp.applicationIconImage` and publishes the image the welcome screen and About draw. It never touches the bundle's icon on disk.
 
 ### View Hierarchy
 
@@ -151,6 +152,9 @@ Hashlight/
 ├── QuickOpenView.swift      # Quick open dialog
 ├── Assets.xcassets/         # Accent color (no app icon here)
 ├── Hashlight.icon/          # App icon (Icon Composer bundle; copy of design/icon/Hashlight.icon)
+├── DockIcon-Frost.icns      # Dock icon setting's images (copies of design/icon/Hashlight-*.icns)
+├── DockIcon-Ember.icns
+├── DockIconController.swift # Applies the Dock icon setting to the running app's icon
 └── Hashlight.entitlements   # Sandbox disabled; see Sandboxing Considerations below
 ```
 

@@ -82,6 +82,13 @@ enum HelpHTML {
             <li><strong>Light</strong> - Always light mode</li>
             <li><strong>Dark</strong> - Always dark mode</li>
         </ul>
+        <h3>Dock Icon</h3>
+        <ul>
+            <li><strong>System</strong> - Leaves the icon to macOS. On macOS 26 it follows the icon style in System Settings → Appearance; on earlier versions it shows Frost in Light mode and Ember in Dark mode.</li>
+            <li><strong>Frost</strong> - Always the light icon</li>
+            <li><strong>Ember</strong> - Always the dark icon</li>
+        </ul>
+        <p>The choice changes the icon in the Dock, the app switcher, the welcome screen, and About while Hashlight runs. Finder keeps the standard icon.</p>
         <h3>Markdown Preview Theme</h3>
         <p>Use the <strong>Light mode</strong> and <strong>Dark mode</strong> menus to choose a
         separate Base16 theme for each appearance. The preview switches between them automatically

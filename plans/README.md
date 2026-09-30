@@ -7,7 +7,7 @@ was verified, and what is left. Update a plan's status and execution notes when 
 |---|---|---|
 | [001](001-create-hashlight.md) | Create Hashlight from zMD Viewer | DONE |
 | [002](002-import-official-icon.md) | Import the official Hashlight icon | DONE |
-| [003](003-dock-icon-preference.md) | Dock-icon preference for macOS 13–15 (brief §4.2) | TODO — next |
+| [003](003-dock-icon-preference.md) | Dock-icon preference (brief §4.2; on every macOS version by the owner's choice) | DONE |
 
 Status values: TODO | IN PROGRESS | DONE | BLOCKED (with a reason) | REJECTED (with a reason).
 

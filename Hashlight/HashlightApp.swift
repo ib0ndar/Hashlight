@@ -331,6 +331,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         // here means "inherit macOS" and updates existing windows without requiring a focus
         // change, unlike clearing SwiftUI's preferredColorScheme on a Settings scene.
         ApplicationAppearance.apply(SettingsManager.shared.colorScheme, to: NSApplication.shared)
+        DockIconController.shared.start(observing: SettingsManager.shared)
 
         // Register for Apple Events to handle file opening
         NSAppleEventManager.shared().setEventHandler(

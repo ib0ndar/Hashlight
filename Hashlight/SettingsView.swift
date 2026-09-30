@@ -78,6 +78,13 @@ struct AppearanceSettingsTab: View {
         )
     }
 
+    private var dockIconFootnote: String {
+        if DockIconController.systemStylesAppIcon {
+            return "System follows the icon style set in System Settings → Appearance. Frost and Ember change only the Dock and app switcher icon, while Hashlight runs."
+        }
+        return "System uses Frost in Light mode and Ember in Dark mode. Each choice changes only the Dock and app switcher icon, while Hashlight runs."
+    }
+
     var body: some View {
         Form {
             Section("Theme") {
@@ -101,6 +108,19 @@ struct AppearanceSettingsTab: View {
                     }
                 }
                 .pickerStyle(.menu)
+            }
+
+            Section("Icon") {
+                Picker("Dock icon", selection: $settings.dockIconMode) {
+                    ForEach(SettingsManager.DockIconMode.allCases, id: \.self) { mode in
+                        Text(mode.displayName).tag(mode)
+                    }
+                }
+                .pickerStyle(.segmented)
+
+                Text(dockIconFootnote)
+                    .font(.system(size: 11))
+                    .foregroundStyle(.secondary)
             }
 
             Section("Font") {
@@ -218,11 +238,13 @@ struct AppearanceSettingsTab: View {
 // MARK: - About
 
 struct AboutTab: View {
+    @ObservedObject private var dockIcon = DockIconController.shared
+
     var body: some View {
         VStack(spacing: 16) {
             Spacer()
 
-            Image(nsImage: NSApp.applicationIconImage)
+            Image(nsImage: dockIcon.image)
                 .resizable()
                 .frame(width: 80, height: 80)
 

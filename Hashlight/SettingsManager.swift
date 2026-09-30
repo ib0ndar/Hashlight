@@ -118,6 +118,7 @@ enum Cache {
 enum DefaultsKeys {
     // MARK: Settings (SettingsManager)
     static let colorScheme = "colorScheme"
+    static let dockIconMode = "dockIconMode"
     static let lightPreviewThemeID = "lightPreviewThemeID"
     static let darkPreviewThemeID = "darkPreviewThemeID"
     /// Used only to migrate builds that stored one preview theme for both appearances.
@@ -149,6 +150,13 @@ class SettingsManager: ObservableObject {
     @Published var colorScheme: ColorScheme? {
         didSet {
             UserDefaults.standard.set(colorScheme == .dark ? "dark" : (colorScheme == .light ? "light" : "system"), forKey: DefaultsKeys.colorScheme)
+        }
+    }
+
+    /// Icon the Dock and app switcher show while Hashlight runs; `DockIconController` applies it.
+    @Published var dockIconMode: DockIconMode {
+        didSet {
+            UserDefaults.standard.set(dockIconMode.rawValue, forKey: DefaultsKeys.dockIconMode)
         }
     }
 
@@ -280,6 +288,18 @@ class SettingsManager: ObservableObject {
         }
     }
 
+    /// System leaves the icon to macOS (on macOS 13–15: Frost in Light mode, Ember in Dark mode);
+    /// Frost and Ember override it.
+    enum DockIconMode: String, CaseIterable {
+        case system = "System"
+        case frost = "Frost"
+        case ember = "Ember"
+
+        var displayName: String {
+            return self.rawValue
+        }
+    }
+
     enum PageMargin: String, CaseIterable {
         case compact = "Compact"
         case normal = "Normal"
@@ -321,6 +341,9 @@ class SettingsManager: ObservableObject {
 
         let savedPageMargin = UserDefaults.standard.string(forKey: DefaultsKeys.pageMargin) ?? PageMargin.normal.rawValue
         self.pageMargin = PageMargin(rawValue: savedPageMargin) ?? .normal
+
+        let savedDockIconMode = UserDefaults.standard.string(forKey: DefaultsKeys.dockIconMode) ?? DockIconMode.system.rawValue
+        self.dockIconMode = DockIconMode(rawValue: savedDockIconMode) ?? .system
 
         self.tableColumnConfiguration = MarkdownTableColumnPreferences.loadAppDefaults()
 

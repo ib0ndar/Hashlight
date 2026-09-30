@@ -8,11 +8,10 @@ Written 2026-09-30.
 
 Hashlight is a native, read-only Markdown viewer for macOS 13+ (Swift 6, SwiftUI + AppKit, an
 `NSTextView` renderer). It started as zMD Viewer, a read-only edition of the zMD editor, and is now
-an independent project with its own identity, icon, and repository. The code builds, all 98 tests
-pass locally (Xcode 27) and on hosted CI (Xcode 26.6), and the official icon is wired in.
-**Next task:**
-[plan 003, the macOS 13–15 Dock-icon preference](plans/003-dock-icon-preference.md). It has three
-questions for the owner that must be answered first.
+an independent project with its own identity, icon, and repository. The code builds, all 104 tests
+pass locally (Xcode 27), and the official icon is wired in. Plan 003 added a Dock icon setting
+(System / Frost / Ember) on every macOS version; hosted CI (Xcode 26.6) last passed before it, so
+check the run after the next push. **Next task:** none planned; see "Open decisions" below.
 
 ## Where everything is
 
@@ -23,7 +22,7 @@ questions for the owner that must be answered first.
 | CI | `.github/workflows/ci.yml`: build and test on pushes to and PRs into `main`, runner `macos-26` (Xcode 26.6). Dependabot is on for GitHub Actions. |
 | Agent rules | `AGENTS.md`: identity, build/test commands, registration hygiene, Finder safety, release rules, known issues |
 | Architecture guide | `CLAUDE.md` |
-| Plans | `plans/` (001 create, 002 icon, 003 next) |
+| Plans | `plans/` (001 create, 002 icon, 003 Dock icon setting) |
 | Official icon and brand | `design/` (start with `design/BRIEF.md`); compiled icon `Hashlight/Hashlight.icon` |
 | Manual-test documents | `fixtures/` (see `fixtures/README.md`) |
 | Scratch output (ignored) | `artifacts/`: screenshots of the Hashlight checks (`artifacts/screens/`) and build/test logs. Not in git. |
@@ -55,7 +54,8 @@ questions for the owner that must be answered first.
    - `5210c6e` imports that tree unchanged (fresh history, by the owner's choice);
    - `c16a2ad` renames everything;
    - `518c4a2` rewrites the docs;
-   - `7333e6b` wires in the official icon (plans 001 and 002).
+   - `7333e6b` wires in the official icon (plans 001 and 002);
+   - plan 003 adds the Dock icon setting.
 
 ## What the product does (and must keep doing)
 
@@ -70,13 +70,15 @@ questions for the owner that must be answered first.
 - Other features: tabs, outline, Quick Open (⌘⇧O), command palette (⌘K), focus mode, themes (351
   Base16 palettes) and fonts, Mermaid and KaTeX, and export to PDF, HTML, DOCX, and RTF plus
   print.
+- A Dock icon setting (Settings → Appearance → Icon: System / Frost / Ember) on every macOS
+  version. System leaves the icon to macOS; the welcome screen and About show the chosen icon.
 - A Quick Look extension renders Markdown in Finder.
 - There is no updater and no published release yet.
 
 ## Build, test, check
 
 ```bash
-./scripts/xcodebuild-hashlight.sh -configuration Debug test          # 98 tests
+./scripts/xcodebuild-hashlight.sh -configuration Debug test          # 104 tests
 ./scripts/xcodebuild-hashlight.sh -configuration Release \
   CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY='' DEVELOPMENT_TEAM='' build
 xcrun xcresulttool get test-results summary --path "$(ls -td build/Xcode/DerivedData/Logs/Test/*.xcresult | head -1)"
@@ -114,6 +116,9 @@ Recording permission. The Debug app's name for it is **"Hashlight Debug"**.
   `FolderManager.shared.setFolder(URL(fileURLWithPath: …))` (it stores the bookmark in the Debug
   defaults), run once with `-only-testing:` and then deleted. The normal UI route is Open Folder
   (⌘⌥O).
+- **Dock tile:** the Dock is not in agent-desktop's window list. Get the tile's frame with
+  `osascript -e 'tell application "System Events" to tell process "Dock" to get {position, size} of (first UI element of list 1 whose name contains "Hashlight")'`
+  and capture only that rectangle with `screencapture -x -R x,y,w,h artifacts/screens/NAME.png`.
 - **Stale app icon** after changing the icon: run
   `/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister -f build/Xcode/Debug/Hashlight.app`
   and relaunch.
@@ -133,8 +138,11 @@ Recording permission. The Debug app's name for it is **"Hashlight Debug"**.
   has no `setDrawsBackground:` (only `_setDrawsBackground:`), so
   `WebRenderer.configureTransparentBackground` leaves it opaque. Inherited from zMD; not fixed.
 - **Icon on macOS 13–15:** they show Xcode's generated Frost fallback, not the designer's
-  hand-tuned small sizes. Apple's tooling makes the compiled icon win everywhere. See plan 002;
-  plan 003 improves the running app's Dock tile.
+  hand-tuned small sizes. Apple's tooling makes the compiled icon win everywhere. See plan 002.
+  While Hashlight runs, the Dock icon setting (plan 003) shows the designer's `.icns` in the Dock.
+- **Dock icon setting on macOS 13–15:** never run on those systems (no machine); unit tests only.
+- **Settings window height:** the Appearance tab is taller than its fixed 480 × 620 pt window on
+  macOS 26 and scrolls (Zoom and Advanced were already below the fold before plan 003).
 - **`xcodebuild clean`** via the wrapper fails ("Could not delete build/Xcode because it was not
   created by the build system"). To force a clean product, delete the product under
   `build/Xcode/<Config>/` instead. Inherited build layout.
@@ -148,8 +156,6 @@ Recording permission. The Debug app's name for it is **"Hashlight Debug"**.
 
 ## Open decisions (owner)
 
-- **Plan 003:** its three questions (what Match Appearance follows, whether the welcome/About icon
-  follows the Dock choice, and a macOS 13–15 machine to verify on).
 - **From `design/BRIEF.md` §6:**
   - minimum macOS version (currently 13);
   - distribution (currently a direct, ad-hoc signed DMG; no notarization, since the owner has no

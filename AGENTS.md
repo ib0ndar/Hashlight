@@ -4,7 +4,7 @@ This file is the repository-specific source of truth for coding agents working o
 it before changing code, choosing a version number, creating a tag, or pushing anything.
 
 Start with `HANDOVER.md` for the current state, open decisions, and hands-on testing notes, and with
-`plans/README.md` for finished and upcoming work (the next task is plan 003).
+`plans/README.md` for finished and upcoming work (plans 001–003 are done; no next task is planned).
 
 ## Repository identity and origin
 
@@ -70,8 +70,9 @@ Main components:
 - `Hashlight/HashlightApp.swift`: app/scenes, commands, window lifecycle, app-wide appearance.
 - `Hashlight/DocumentManager.swift`: documents, tabs, loading and silent reloads, file watching,
   find state, and closing.
-- `Hashlight/SettingsManager.swift`: persisted appearance, preview, layout, zoom, and table
-  settings.
+- `Hashlight/SettingsManager.swift`: persisted appearance, Dock icon, preview, layout, zoom, and
+  table settings.
+- `Hashlight/DockIconController.swift`: applies the Dock icon setting to the running app's icon.
 - `Hashlight/MarkdownParser.swift`: block parser and HTML generation shared with Quick Look.
 - `Hashlight/InlineMarkdown.swift`: shared inline tokenizer.
 - `Hashlight/MarkdownTextView.swift`: native rendered preview (including reload handling).
@@ -83,7 +84,7 @@ Main components:
   app and Quick Look extension.
 - `HashlightQuickLook/`: sandboxed Finder Quick Look extension.
 - `HashlightTests/`: XCTest target covering parsing, rendering behavior, the preview, file
-  watching and closing, Quick Look, themes, fonts, and table layout.
+  watching and closing, Quick Look, themes, fonts, table layout, and the Dock icon setting.
 
 Read `CLAUDE.md` for the longer architecture guide and `CONTRIBUTING.md` for code conventions.
 
@@ -105,17 +106,32 @@ copy the results.
   generates a flattened `Hashlight.icns` fallback because the deployment target is macOS 13. The
   Markdown document type's `CFBundleTypeIconFile` points at that `Hashlight` icon.
 - **macOS 26+** shows the layered icon and switches it with System Settings → Appearance → Icon &
-  widget style. Do not add an app-level icon toggle there (brief §4.2). The app's own Light/Dark
-  setting does not change the icon.
+  widget style. The app's own Light/Dark setting does not change the icon.
 - **macOS 13–15** show Xcode's flattened Frost fallback from `Assets.car`, not the hand-tuned 16
   and 32 px renditions in `design/icon/Hashlight-Frost.icns`. Brief §4.1 step 3 suggests pointing
   `CFBundleIconFile` at that `.icns`, but with an Icon Composer icon, current Xcode makes the
   catalog icon win on every macOS version (Apple: "by design"), and the known workarounds need
   Xcode 26.0.1 or a checked-in prebuilt `Assets.car`. It is not done; revisit only with the user
   and a macOS 15 machine to verify on.
-- **Not implemented yet (brief §4.2):** the macOS 13–15 "Dock icon: Frost / Ember / Match
-  appearance" preference. It is the next task, planned in `plans/003-dock-icon-preference.md`;
-  that plan has questions for the owner to answer before starting.
+- **Dock icon setting** (plan 003): Settings → Appearance → Icon → Dock icon: System / Frost /
+  Ember, default System, on **every** macOS version. The owner decided on 2026-09-30 to offer it on
+  macOS 26 as well, overriding brief §4.2 ("hide the preference on macOS 26"); do not hide it
+  again without asking.
+  - System leaves the icon to macOS: on macOS 26 the icon style above; on macOS 13–15 Frost in
+    Light mode and Ember in Dark mode. It follows the system's Light/Dark setting, not the app's
+    own Appearance override (brief §4.2's "Match appearance", as the owner chose).
+  - Frost and Ember always show that icon. `DockIconController` changes only
+    `NSApp.applicationIconImage` (Dock tile and app switcher while the app runs). Never rewrite
+    the bundle's icon on disk: Finder, Launchpad, and a quit app keep the bundle icon.
+  - The images are `Hashlight/DockIcon-Frost.icns` and `DockIcon-Ember.icns`, byte-for-byte copies
+    of `design/icon/Hashlight-Frost.icns` and `Hashlight-Ember.icns` (`cmp` them after any
+    change). Do not name either `Hashlight.icns`: the asset compiler writes that file.
+  - The welcome screen and Settings → About draw `DockIconController.shared.image`, so they show
+    the same icon as the Dock. `applicationIconImage` returns one shared image that AppKit redraws
+    in place, which SwiftUI would not notice; do not draw it directly.
+  - The macOS 13–15 path (System mode following Light/Dark through
+    `AppleInterfaceThemeChangedNotification`) is covered by unit tests only; it has not been run
+    on a macOS 13–15 system.
 - **Marketing image:** `design/icon/Hashlight-Frost-1024.png` (README, website, listings).
 - The brief's suggested bundle identifier `app.hashlight.Hashlight` is not used; the user chose
   `io.github.ib0ndar.hashlight`. Changing it would reset users' settings.

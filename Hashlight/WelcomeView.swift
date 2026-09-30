@@ -2,6 +2,7 @@ import SwiftUI
 
 struct WelcomeView: View {
     @EnvironmentObject private var documentManager: DocumentManager
+    @ObservedObject private var dockIcon = DockIconController.shared
     @State private var showIcon = false
     @State private var showSubtitle = false
     @State private var showButton = false
@@ -14,7 +15,7 @@ struct WelcomeView: View {
         VStack(spacing: 0) {
             Spacer()
 
-            Image(nsImage: NSApp.applicationIconImage)
+            Image(nsImage: dockIcon.image)
                 .resizable()
                 .frame(width: 96, height: 96)
                 .scaleEffect(iconBounce ? 1.0 : 0.5)
