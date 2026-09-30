@@ -81,7 +81,7 @@ Rendering and export must stay in sync:
 
 ## Submitting changes
 
-1. Fork and create a topic branch off `master`.
+1. Fork and create a topic branch off `main`.
 2. Keep commits focused; explain *why* in the body when it isn't obvious.
 3. Before opening a PR:
    - `./scripts/xcodebuild-hashlight.sh … build` succeeds with no new warnings
@@ -89,7 +89,7 @@ Rendering and export must stay in sync:
    - If you touched rendering or export, manually spot-check a markdown
      fixture in preview **and** at least one export format (they share the
      parser, but backend-specific bugs are the most common regression).
-4. Open a PR against `master` with a clear description of the behavior
+4. Open a PR against `main` with a clear description of the behavior
    change.
 
 ## Reporting bugs
@@ -104,7 +104,7 @@ Open an issue at <https://github.com/ib0ndar/Hashlight/issues> with:
 
 ## Releases
 
-Releases for this fork are ad-hoc signed and disclose that they are not Developer ID signed or
+Hashlight releases are ad-hoc signed and disclose that they are not Developer ID signed or
 notarized. Build the DMG with `./scripts/build-dmg.sh`; it lays out the disk image with
 `dmgbuild`, installed on demand into `build/dmg-venv`, and never scripts Finder.
 

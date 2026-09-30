@@ -70,6 +70,7 @@ preference on macOS 26". The result:
 - `./scripts/xcodebuild-hashlight.sh -configuration Debug test`: 104 of 104 tests pass (counted
   from the result bundle; 98 before plus 6 new in `DockIconTests`), no compiler warnings.
 - Release compile (unsigned): succeeds, no warnings.
+- Hosted CI (`macos-26`, Xcode 26.6): build and tests pass for `64bb58a` (run 36719847957).
 - The built app's `DockIcon-*.icns` are identical to `design/icon/` (`cmp`). `plutil -lint` of the
   project passes.
 - Hands-on on macOS 26.7.1 (Debug build; screenshots in the ignored `artifacts/screens/`, e.g.

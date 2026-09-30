@@ -9,9 +9,9 @@ Written 2026-09-30.
 Hashlight is a native, read-only Markdown viewer for macOS 13+ (Swift 6, SwiftUI + AppKit, an
 `NSTextView` renderer). It started as zMD Viewer, a read-only edition of the zMD editor, and is now
 an independent project with its own identity, icon, and repository. The code builds, all 104 tests
-pass locally (Xcode 27), and the official icon is wired in. Plan 003 added a Dock icon setting
-(System / Frost / Ember) on every macOS version; hosted CI (Xcode 26.6) last passed before it, so
-check the run after the next push. **Next task:** none planned; see "Open decisions" below.
+pass locally (Xcode 27) and on hosted CI (Xcode 26.6), and the official icon is wired in. Plan 003
+added a Dock icon setting (System / Frost / Ember) on every macOS version. **Next task:** none
+planned; see "Open decisions" below.
 
 ## Where everything is
 
