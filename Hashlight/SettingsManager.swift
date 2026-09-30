@@ -342,7 +342,7 @@ class SettingsManager: ObservableObject {
         MarkdownTableColumnPreferences.persist(tableColumnConfiguration)
 
         // Observe NSApplication.effectiveAppearance so views observing SettingsManager re-render
-        // on system theme toggle. SettingsManager.shared can be touched during zMDApp.init —
+        // on system theme toggle. SettingsManager.shared can be touched during HashlightApp.init —
         // BEFORE NSApp's global is wired up — so accessing NSApp directly here was a launch
         // crash (force-unwrap of nil). Defer to the next main-queue spin: by then the App
         // delegate has assigned NSApp, and NSApplication.shared is the safe canonical accessor.

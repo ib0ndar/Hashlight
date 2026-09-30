@@ -1,5 +1,5 @@
 import XCTest
-@testable import zMD
+@testable import Hashlight
 
 nonisolated final class PreviewThemeTests: XCTestCase {
     @MainActor

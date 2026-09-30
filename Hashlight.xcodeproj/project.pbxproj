@@ -29,7 +29,7 @@
 		F1A2B3C4D5E6F708B /* QuickOpenView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F1A2B3C4D5E6F708A /* QuickOpenView.swift */; };
 		F1A2B3C4D5E6F708D /* PrintManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = F1A2B3C4D5E6F708C /* PrintManager.swift */; };
 		A1B2C3D4E5F6A70801020304 /* FuzzyMatcher.swift in Sources */ = {isa = PBXBuildFile; fileRef = F1A2B3C4D5E6F70801020304 /* FuzzyMatcher.swift */; };
-		A10000001 /* zMDApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000000 /* zMDApp.swift */; };
+		A10000001 /* HashlightApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000000 /* HashlightApp.swift */; };
 		A10000003 /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000002 /* ContentView.swift */; };
 		A10000005 /* DocumentManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000004 /* DocumentManager.swift */; };
 
@@ -53,7 +53,7 @@
 		51AA00000000000000000014 /* InlineMarkdown.swift in Sources */ = {isa = PBXBuildFile; fileRef = E77A00000000000000000100 /* InlineMarkdown.swift */; };
 		51AA00000000000000000015 /* PreviewProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = 51AA00000000000000000002 /* PreviewProvider.swift */; };
 		51AA00000000000000000016 /* QuickLookHTML.swift in Sources */ = {isa = PBXBuildFile; fileRef = 51AA00000000000000000003 /* QuickLookHTML.swift */; };
-		51AA00000000000000000017 /* zMDQuickLook.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = 51AA00000000000000000006 /* zMDQuickLook.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
+		51AA00000000000000000017 /* HashlightQuickLook.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = 51AA00000000000000000006 /* HashlightQuickLook.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 		51AA00000000000000000018 /* QuickLookHTML.swift in Sources */ = {isa = PBXBuildFile; fileRef = 51AA00000000000000000003 /* QuickLookHTML.swift */; };
 		51AA00000000000000000019 /* QuickLookHTMLTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 51AA00000000000000000007 /* QuickLookHTMLTests.swift */; };
 		710000000000000000000002 /* PreviewTheme.swift in Sources */ = {isa = PBXBuildFile; fileRef = 710000000000000000000001 /* PreviewTheme.swift */; };
@@ -68,14 +68,14 @@
 			containerPortal = AAAAAAAA /* Project object */;
 			proxyType = 1;
 			remoteGlobalIDString = A6666666;
-			remoteInfo = zMD;
+			remoteInfo = Hashlight;
 		};
 		51AA00000000000000000041 /* PBXContainerItemProxy */ = {
 			isa = PBXContainerItemProxy;
 			containerPortal = AAAAAAAA /* Project object */;
 			proxyType = 1;
 			remoteGlobalIDString = 51AA00000000000000000040;
-			remoteInfo = zMDQuickLook;
+			remoteInfo = HashlightQuickLook;
 		};
 /* End PBXContainerItemProxy section */
 
@@ -86,7 +86,7 @@
 			dstPath = "";
 			dstSubfolderSpec = 13;
 			files = (
-				51AA00000000000000000017 /* zMDQuickLook.appex in Embed Foundation Extensions */,
+				51AA00000000000000000017 /* HashlightQuickLook.appex in Embed Foundation Extensions */,
 			);
 			name = "Embed Foundation Extensions";
 			runOnlyForDeploymentPostprocessing = 0;
@@ -115,17 +115,17 @@
 		F1A2B3C4D5E6F708A /* QuickOpenView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QuickOpenView.swift; sourceTree = "<group>"; };
 		F1A2B3C4D5E6F708C /* PrintManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PrintManager.swift; sourceTree = "<group>"; };
 		F1A2B3C4D5E6F70801020304 /* FuzzyMatcher.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FuzzyMatcher.swift; sourceTree = "<group>"; };
-		A10000000 /* zMDApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = zMDApp.swift; sourceTree = "<group>"; };
+		A10000000 /* HashlightApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HashlightApp.swift; sourceTree = "<group>"; };
 		A10000002 /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
 		A10000004 /* DocumentManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DocumentManager.swift; sourceTree = "<group>"; };
 
 		A10000008 /* TabBar.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TabBar.swift; sourceTree = "<group>"; };
 		A10000012 /* SearchBar.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SearchBar.swift; sourceTree = "<group>"; };
 		A1000000A /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
-		A1000000C /* zMD.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = zMD.entitlements; sourceTree = "<group>"; };
+		A1000000C /* Hashlight.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = Hashlight.entitlements; sourceTree = "<group>"; };
 		A1000000E /* OutlineView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OutlineView.swift; sourceTree = "<group>"; };
 		A10000010 /* ExportManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ExportManager.swift; sourceTree = "<group>"; };
-		A1111111 /* zMD Viewer.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "zMD Viewer.app"; sourceTree = BUILT_PRODUCTS_DIR; };
+		A1111111 /* Hashlight.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Hashlight.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		B1C2D3E4F5A6B70801020305 /* DirectoryWatcher.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DirectoryWatcher.swift; sourceTree = "<group>"; };
 		B1C2D3E4F5A6B70801020306 /* FolderManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FolderManager.swift; sourceTree = "<group>"; };
 		B1C2D3E4F5A6B70801020307 /* FolderSidebarView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FolderSidebarView.swift; sourceTree = "<group>"; };
@@ -135,13 +135,13 @@
 		A3B4C5D6E7F8090123456789 /* CommandPaletteView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CommandPaletteView.swift; sourceTree = "<group>"; };
 		E77A00000000000000000201 /* InlineMarkdownTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InlineMarkdownTests.swift; sourceTree = "<group>"; };
 		6242B8DCAEB7EAC8A2896FC8 /* MarkdownParserTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MarkdownParserTests.swift; sourceTree = "<group>"; };
-		E77A00000000000000000203 /* zMDTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = zMDTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		E77A00000000000000000203 /* HashlightTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = HashlightTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		51AA00000000000000000001 /* SharedConstants.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SharedConstants.swift; sourceTree = "<group>"; };
 		51AA00000000000000000002 /* PreviewProvider.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PreviewProvider.swift; sourceTree = "<group>"; };
 		51AA00000000000000000003 /* QuickLookHTML.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QuickLookHTML.swift; sourceTree = "<group>"; };
 		51AA00000000000000000004 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
-		51AA00000000000000000005 /* zMDQuickLook.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = zMDQuickLook.entitlements; sourceTree = "<group>"; };
-		51AA00000000000000000006 /* zMDQuickLook.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = zMDQuickLook.appex; sourceTree = BUILT_PRODUCTS_DIR; };
+		51AA00000000000000000005 /* HashlightQuickLook.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = HashlightQuickLook.entitlements; sourceTree = "<group>"; };
+		51AA00000000000000000006 /* HashlightQuickLook.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = HashlightQuickLook.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 		51AA00000000000000000007 /* QuickLookHTMLTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QuickLookHTMLTests.swift; sourceTree = "<group>"; };
 		710000000000000000000001 /* PreviewTheme.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PreviewTheme.swift; sourceTree = "<group>"; };
 		710000000000000000000003 /* PreviewThemeTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PreviewThemeTests.swift; sourceTree = "<group>"; };
@@ -178,14 +178,14 @@
 		A3333333 = {
 			isa = PBXGroup;
 			children = (
-				A4444444 /* zMD */,
-				51AA00000000000000000020 /* zMDQuickLook */,
-				E77A00000000000000000200 /* zMDTests */,
+				A4444444 /* Hashlight */,
+				51AA00000000000000000020 /* HashlightQuickLook */,
+				E77A00000000000000000200 /* HashlightTests */,
 				A5555555 /* Products */,
 			);
 			sourceTree = "<group>";
 		};
-		A4444444 /* zMD */ = {
+		A4444444 /* Hashlight */ = {
 			isa = PBXGroup;
 			children = (
 				F60000000000000000000002 /* HelpHTML.swift */,
@@ -197,7 +197,7 @@
 				F6000000000000000000001A /* NormalContentView.swift */,
 				F6000000000000000000001C /* FocusModeContentView.swift */,
 				F60000000000000000000020 /* DocumentViewModeContent.swift */,
-				A10000000 /* zMDApp.swift */,
+				A10000000 /* HashlightApp.swift */,
 				A10000002 /* ContentView.swift */,
 				C007183B47884CF6A423E3DE /* HelpView.swift */,
 				A10000004 /* DocumentManager.swift */,
@@ -219,7 +219,7 @@
 				F1A2B3C4D5E6F70801020304 /* FuzzyMatcher.swift */,
 				F1A2B3C4D5E6F708C /* PrintManager.swift */,
 				A1000000A /* Assets.xcassets */,
-				A1000000C /* zMD.entitlements */,
+				A1000000C /* Hashlight.entitlements */,
 
 				7B3F07EF007F429AB9E72113 /* SettingsManager.swift */,
 				A3B4C5D6E7F8090123456789 /* CommandPaletteView.swift */,
@@ -232,20 +232,20 @@
 				B1C2D3E4F5A6B70801020307 /* FolderSidebarView.swift */,
 				4647E1ABB7480F258C457C59 /* WebRenderer.swift */,
 			);
-			path = zMD;
+			path = Hashlight;
 			sourceTree = "<group>";
 		};
 		A5555555 /* Products */ = {
 			isa = PBXGroup;
 			children = (
-A1111111 /* zMD Viewer.app */,
-				51AA00000000000000000006 /* zMDQuickLook.appex */,
-				E77A00000000000000000203 /* zMDTests.xctest */,
+A1111111 /* Hashlight.app */,
+				51AA00000000000000000006 /* HashlightQuickLook.appex */,
+				E77A00000000000000000203 /* HashlightTests.xctest */,
 			);
 			name = Products;
 			sourceTree = "<group>";
 		};
-		E77A00000000000000000200 /* zMDTests */ = {
+		E77A00000000000000000200 /* HashlightTests */ = {
 			isa = PBXGroup;
 			children = (
 				E77A00000000000000000201 /* InlineMarkdownTests.swift */,
@@ -254,26 +254,26 @@ A1111111 /* zMD Viewer.app */,
 				710000000000000000000003 /* PreviewThemeTests.swift */,
 				710000000000000000000007 /* PreviewFontTests.swift */,
 			);
-			path = zMDTests;
+			path = HashlightTests;
 			sourceTree = "<group>";
 		};
-		51AA00000000000000000020 /* zMDQuickLook */ = {
+		51AA00000000000000000020 /* HashlightQuickLook */ = {
 			isa = PBXGroup;
 			children = (
 				51AA00000000000000000002 /* PreviewProvider.swift */,
 				51AA00000000000000000003 /* QuickLookHTML.swift */,
 				51AA00000000000000000004 /* Info.plist */,
-				51AA00000000000000000005 /* zMDQuickLook.entitlements */,
+				51AA00000000000000000005 /* HashlightQuickLook.entitlements */,
 			);
-			path = zMDQuickLook;
+			path = HashlightQuickLook;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
-		A6666666 /* zMD */ = {
+		A6666666 /* Hashlight */ = {
 			isa = PBXNativeTarget;
-			buildConfigurationList = A7777777 /* Build configuration list for PBXNativeTarget "zMD" */;
+			buildConfigurationList = A7777777 /* Build configuration list for PBXNativeTarget "Hashlight" */;
 			buildPhases = (
 				A8888888 /* Sources */,
 				A2222222 /* Frameworks */,
@@ -285,14 +285,14 @@ A1111111 /* zMD Viewer.app */,
 			dependencies = (
 				51AA00000000000000000042 /* PBXTargetDependency */,
 			);
-			name = zMD;
-			productName = zMD;
-			productReference = A1111111 /* zMD Viewer.app */;
+			name = Hashlight;
+			productName = Hashlight;
+			productReference = A1111111 /* Hashlight.app */;
 			productType = "com.apple.product-type.application";
 		};
-		E77A00000000000000000207 /* zMDTests */ = {
+		E77A00000000000000000207 /* HashlightTests */ = {
 			isa = PBXNativeTarget;
-			buildConfigurationList = E77A0000000000000000020C /* Build configuration list for PBXNativeTarget "zMDTests" */;
+			buildConfigurationList = E77A0000000000000000020C /* Build configuration list for PBXNativeTarget "HashlightTests" */;
 			buildPhases = (
 				E77A00000000000000000205 /* Sources */,
 				E77A00000000000000000204 /* Frameworks */,
@@ -302,14 +302,14 @@ A1111111 /* zMD Viewer.app */,
 			dependencies = (
 				E77A00000000000000000208 /* PBXTargetDependency */,
 			);
-			name = zMDTests;
-			productName = zMDTests;
-			productReference = E77A00000000000000000203 /* zMDTests.xctest */;
+			name = HashlightTests;
+			productName = HashlightTests;
+			productReference = E77A00000000000000000203 /* HashlightTests.xctest */;
 			productType = "com.apple.product-type.bundle.unit-test";
 		};
-		51AA00000000000000000040 /* zMDQuickLook */ = {
+		51AA00000000000000000040 /* HashlightQuickLook */ = {
 			isa = PBXNativeTarget;
-			buildConfigurationList = 51AA00000000000000000052 /* Build configuration list for PBXNativeTarget "zMDQuickLook" */;
+			buildConfigurationList = 51AA00000000000000000052 /* Build configuration list for PBXNativeTarget "HashlightQuickLook" */;
 			buildPhases = (
 				51AA00000000000000000030 /* Sources */,
 				51AA00000000000000000031 /* Frameworks */,
@@ -319,9 +319,9 @@ A1111111 /* zMD Viewer.app */,
 			);
 			dependencies = (
 			);
-			name = zMDQuickLook;
-			productName = zMDQuickLook;
-			productReference = 51AA00000000000000000006 /* zMDQuickLook.appex */;
+			name = HashlightQuickLook;
+			productName = HashlightQuickLook;
+			productReference = 51AA00000000000000000006 /* HashlightQuickLook.appex */;
 			productType = "com.apple.product-type.app-extension";
 		};
 /* End PBXNativeTarget section */
@@ -346,7 +346,7 @@ A1111111 /* zMD Viewer.app */,
 					};
 				};
 			};
-			buildConfigurationList = BBBBBBBB /* Build configuration list for PBXProject "zMD" */;
+			buildConfigurationList = BBBBBBBB /* Build configuration list for PBXProject "Hashlight" */;
 			compatibilityVersion = "Xcode 14.0";
 			developmentRegion = en;
 			hasScannedForEncodings = 0;
@@ -359,9 +359,9 @@ A1111111 /* zMD Viewer.app */,
 			projectDirPath = "";
 			projectRoot = "";
 			targets = (
-				A6666666 /* zMD */,
-				E77A00000000000000000207 /* zMDTests */,
-				51AA00000000000000000040 /* zMDQuickLook */,
+				A6666666 /* Hashlight */,
+				E77A00000000000000000207 /* HashlightTests */,
+				51AA00000000000000000040 /* HashlightQuickLook */,
 			);
 		};
 /* End PBXProject section */
@@ -401,7 +401,7 @@ A1111111 /* zMD Viewer.app */,
 				F6000000000000000000001D /* FocusModeContentView.swift in Sources */,
 				F60000000000000000000021 /* DocumentViewModeContent.swift in Sources */,
 				BD22D32F63AA4915B6E3390D /* HelpView.swift in Sources */,
-				A10000001 /* zMDApp.swift in Sources */,
+				A10000001 /* HashlightApp.swift in Sources */,
 				A10000003 /* ContentView.swift in Sources */,
 				A10000005 /* DocumentManager.swift in Sources */,
 
@@ -464,12 +464,12 @@ A1111111 /* zMD Viewer.app */,
 /* Begin PBXTargetDependency section */
 		E77A00000000000000000208 /* PBXTargetDependency */ = {
 			isa = PBXTargetDependency;
-			target = A6666666 /* zMD */;
+			target = A6666666 /* Hashlight */;
 			targetProxy = E77A00000000000000000209 /* PBXContainerItemProxy */;
 		};
 		51AA00000000000000000042 /* PBXTargetDependency */ = {
 			isa = PBXTargetDependency;
-			target = 51AA00000000000000000040 /* zMDQuickLook */;
+			target = 51AA00000000000000000040 /* HashlightQuickLook */;
 			targetProxy = 51AA00000000000000000041 /* PBXContainerItemProxy */;
 		};
 /* End PBXTargetDependency section */
@@ -606,7 +606,7 @@ A1111111 /* zMD Viewer.app */,
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
-				CODE_SIGN_ENTITLEMENTS = zMD/zMD.entitlements;
+				CODE_SIGN_ENTITLEMENTS = Hashlight/Hashlight.entitlements;
 				CODE_SIGN_IDENTITY = "-";
 				CODE_SIGN_STYLE = Manual;
 				COMBINE_HIDPI_IMAGES = YES;
@@ -618,8 +618,8 @@ A1111111 /* zMD Viewer.app */,
 				ENABLE_PREVIEWS = YES;
 				ENABLE_USER_SELECTED_FILES = readwrite;
 				GENERATE_INFOPLIST_FILE = NO;
-				INFOPLIST_FILE = zMD/Info.plist;
-				INFOPLIST_KEY_CFBundleDisplayName = "zMD Viewer";
+				INFOPLIST_FILE = Hashlight/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = Hashlight;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.productivity";
 				INFOPLIST_KEY_NSHumanReadableCopyright = "";
 				LD_RUNPATH_SEARCH_PATHS = (
@@ -628,15 +628,14 @@ A1111111 /* zMD Viewer.app */,
 				);
 				MACOSX_DEPLOYMENT_TARGET = 13.0;
 				MARKETING_VERSION = 1.0.0;
-				PRODUCT_BUNDLE_IDENTIFIER = com.zmd.viewer.debug;
-				PRODUCT_MODULE_NAME = zMD;
-				PRODUCT_NAME = "zMD Viewer";
+				PRODUCT_BUNDLE_IDENTIFIER = io.github.ib0ndar.hashlight.debug;
+				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
 				SWIFT_STRICT_CONCURRENCY = complete;
 				SWIFT_VERSION = 6.0;
-				ZMD_DISPLAY_NAME = "zMD Viewer Debug";
-				ZMD_DOCUMENT_HANDLER_RANK = None;
+				HASHLIGHT_DISPLAY_NAME = "Hashlight Debug";
+				HASHLIGHT_DOCUMENT_HANDLER_RANK = None;
 			};
 			name = Debug;
 		};
@@ -645,7 +644,7 @@ A1111111 /* zMD Viewer.app */,
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
-				CODE_SIGN_ENTITLEMENTS = zMD/zMD.entitlements;
+				CODE_SIGN_ENTITLEMENTS = Hashlight/Hashlight.entitlements;
 				CODE_SIGN_IDENTITY = "Developer ID Application";
 				CODE_SIGN_STYLE = Manual;
 				COMBINE_HIDPI_IMAGES = YES;
@@ -657,8 +656,8 @@ A1111111 /* zMD Viewer.app */,
 				ENABLE_PREVIEWS = YES;
 				ENABLE_USER_SELECTED_FILES = readwrite;
 				GENERATE_INFOPLIST_FILE = NO;
-				INFOPLIST_FILE = zMD/Info.plist;
-				INFOPLIST_KEY_CFBundleDisplayName = "zMD Viewer";
+				INFOPLIST_FILE = Hashlight/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = Hashlight;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.productivity";
 				INFOPLIST_KEY_NSHumanReadableCopyright = "";
 				LD_RUNPATH_SEARCH_PATHS = (
@@ -667,15 +666,14 @@ A1111111 /* zMD Viewer.app */,
 				);
 				MACOSX_DEPLOYMENT_TARGET = 13.0;
 				MARKETING_VERSION = 1.0.0;
-				PRODUCT_BUNDLE_IDENTIFIER = com.zmd.viewer;
-				PRODUCT_MODULE_NAME = zMD;
-				PRODUCT_NAME = "zMD Viewer";
+				PRODUCT_BUNDLE_IDENTIFIER = io.github.ib0ndar.hashlight;
+				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
 				SWIFT_STRICT_CONCURRENCY = complete;
 				SWIFT_VERSION = 6.0;
-				ZMD_DISPLAY_NAME = "zMD Viewer";
-				ZMD_DOCUMENT_HANDLER_RANK = Default;
+				HASHLIGHT_DISPLAY_NAME = Hashlight;
+				HASHLIGHT_DOCUMENT_HANDLER_RANK = Default;
 			};
 			name = Release;
 		};
@@ -693,12 +691,12 @@ A1111111 /* zMD Viewer.app */,
 					"@loader_path/../Frameworks",
 				);
 				MACOSX_DEPLOYMENT_TARGET = 14.0;
-				PRODUCT_BUNDLE_IDENTIFIER = com.zmd.viewer.debug.tests;
+				PRODUCT_BUNDLE_IDENTIFIER = io.github.ib0ndar.hashlight.debug.tests;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
 				SWIFT_STRICT_CONCURRENCY = complete;
 				SWIFT_VERSION = 6.0;
-				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/zMD Viewer.app/Contents/MacOS/zMD Viewer";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Hashlight.app/Contents/MacOS/Hashlight";
 			};
 			name = Debug;
 		};
@@ -716,19 +714,19 @@ A1111111 /* zMD Viewer.app */,
 					"@loader_path/../Frameworks",
 				);
 				MACOSX_DEPLOYMENT_TARGET = 14.0;
-				PRODUCT_BUNDLE_IDENTIFIER = com.zmd.viewer.tests;
+				PRODUCT_BUNDLE_IDENTIFIER = io.github.ib0ndar.hashlight.tests;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
 				SWIFT_STRICT_CONCURRENCY = complete;
 				SWIFT_VERSION = 6.0;
-				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/zMD Viewer.app/Contents/MacOS/zMD Viewer";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Hashlight.app/Contents/MacOS/Hashlight";
 			};
 			name = Release;
 		};
 		51AA00000000000000000050 /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
-				CODE_SIGN_ENTITLEMENTS = "zMDQuickLook/zMDQuickLook-Debug.entitlements";
+				CODE_SIGN_ENTITLEMENTS = "HashlightQuickLook/HashlightQuickLook-Debug.entitlements";
 				CODE_SIGN_IDENTITY = "-";
 				CODE_SIGN_STYLE = Manual;
 				CURRENT_PROJECT_VERSION = 1;
@@ -738,7 +736,7 @@ A1111111 /* zMD Viewer.app */,
 				ENABLE_HARDENED_RUNTIME = YES;
 				ENABLE_USER_SELECTED_FILES = readonly;
 				GENERATE_INFOPLIST_FILE = NO;
-				INFOPLIST_FILE = zMDQuickLook/Info.plist;
+				INFOPLIST_FILE = HashlightQuickLook/Info.plist;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/../Frameworks",
@@ -746,21 +744,21 @@ A1111111 /* zMD Viewer.app */,
 				);
 				MACOSX_DEPLOYMENT_TARGET = 13.0;
 				MARKETING_VERSION = 1.0.0;
-				PRODUCT_BUNDLE_IDENTIFIER = com.zmd.viewer.debug.QuickLook;
+				PRODUCT_BUNDLE_IDENTIFIER = io.github.ib0ndar.hashlight.debug.QuickLook;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SKIP_INSTALL = YES;
 				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				SWIFT_STRICT_CONCURRENCY = complete;
 				SWIFT_VERSION = 6.0;
-				ZMD_QUICKLOOK_DISPLAY_NAME = "zMD Viewer Quick Look (Debug)";
+				HASHLIGHT_QUICKLOOK_DISPLAY_NAME = "Hashlight Quick Look (Debug)";
 			};
 			name = Debug;
 		};
 		51AA00000000000000000051 /* Release */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
-				CODE_SIGN_ENTITLEMENTS = zMDQuickLook/zMDQuickLook.entitlements;
+				CODE_SIGN_ENTITLEMENTS = HashlightQuickLook/HashlightQuickLook.entitlements;
 				CODE_SIGN_IDENTITY = "Developer ID Application";
 				CODE_SIGN_STYLE = Manual;
 				CURRENT_PROJECT_VERSION = 1;
@@ -770,7 +768,7 @@ A1111111 /* zMD Viewer.app */,
 				ENABLE_HARDENED_RUNTIME = YES;
 				ENABLE_USER_SELECTED_FILES = readonly;
 				GENERATE_INFOPLIST_FILE = NO;
-				INFOPLIST_FILE = zMDQuickLook/Info.plist;
+				INFOPLIST_FILE = HashlightQuickLook/Info.plist;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/../Frameworks",
@@ -778,21 +776,21 @@ A1111111 /* zMD Viewer.app */,
 				);
 				MACOSX_DEPLOYMENT_TARGET = 13.0;
 				MARKETING_VERSION = 1.0.0;
-				PRODUCT_BUNDLE_IDENTIFIER = com.zmd.viewer.QuickLook;
+				PRODUCT_BUNDLE_IDENTIFIER = io.github.ib0ndar.hashlight.QuickLook;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SKIP_INSTALL = YES;
 				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				SWIFT_STRICT_CONCURRENCY = complete;
 				SWIFT_VERSION = 6.0;
-				ZMD_QUICKLOOK_DISPLAY_NAME = "zMD Viewer Quick Look";
+				HASHLIGHT_QUICKLOOK_DISPLAY_NAME = "Hashlight Quick Look";
 			};
 			name = Release;
 		};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
-		A7777777 /* Build configuration list for PBXNativeTarget "zMD" */ = {
+		A7777777 /* Build configuration list for PBXNativeTarget "Hashlight" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
 				EEEEEEEE /* Debug */,
@@ -801,7 +799,7 @@ A1111111 /* zMD Viewer.app */,
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
 		};
-		E77A0000000000000000020C /* Build configuration list for PBXNativeTarget "zMDTests" */ = {
+		E77A0000000000000000020C /* Build configuration list for PBXNativeTarget "HashlightTests" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
 				E77A0000000000000000020A /* Debug */,
@@ -810,7 +808,7 @@ A1111111 /* zMD Viewer.app */,
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
 		};
-		BBBBBBBB /* Build configuration list for PBXProject "zMD" */ = {
+		BBBBBBBB /* Build configuration list for PBXProject "Hashlight" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
 				CCCCCCCC /* Debug */,
@@ -819,7 +817,7 @@ A1111111 /* zMD Viewer.app */,
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
 		};
-		51AA00000000000000000052 /* Build configuration list for PBXNativeTarget "zMDQuickLook" */ = {
+		51AA00000000000000000052 /* Build configuration list for PBXNativeTarget "HashlightQuickLook" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
 				51AA00000000000000000050 /* Debug */,

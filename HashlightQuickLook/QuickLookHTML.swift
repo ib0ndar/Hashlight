@@ -5,7 +5,7 @@ import Foundation
 /// Quick Look sandbox (no network, no script execution needed).
 ///
 /// Deliberately free of any QuickLookUI / MarkdownParser dependency so the same file can be
-/// compiled into the zMDTests target and unit-tested without hosting an app extension.
+/// compiled into the HashlightTests target and unit-tested without hosting an app extension.
 nonisolated enum QuickLookHTML {
     /// Upper bound on how much of a file is read for a preview. Quick Look runs while the user is
     /// arrowing through Finder; a multi-hundred-MB log file renamed `.md` must not stall it.
@@ -15,7 +15,7 @@ nonisolated enum QuickLookHTML {
     /// the cut lands at an arbitrary byte, often inside a fenced code / `$$` / HTML block, and
     /// a notice appended as markdown gets swallowed by that open block as literal text — the
     /// user would never learn the preview is incomplete.
-    static let truncationNoticeHTML = "<hr><p><em>Preview truncated — open the file in zMD to see the whole document.</em></p>"
+    static let truncationNoticeHTML = "<hr><p><em>Preview truncated — open the file in Hashlight to see the whole document.</em></p>"
 
     static func appendingTruncationNotice(to html: String) -> String {
         if let bodyEnd = html.range(of: "</body>", options: [.caseInsensitive, .backwards]) {
@@ -166,8 +166,8 @@ nonisolated enum QuickLookHTML {
             img { max-width: 100%; height: auto; }
             pre { white-space: pre-wrap; word-wrap: break-word; }
             a { color: #0969da; }
-            .zmd-markdown-table { table-layout: fixed; width: 100%; }
-            .zmd-markdown-table th, .zmd-markdown-table td { overflow-wrap: anywhere; }
+            .hashlight-markdown-table { table-layout: fixed; width: 100%; }
+            .hashlight-markdown-table th, .hashlight-markdown-table td { overflow-wrap: anywhere; }
             @media (prefers-color-scheme: dark) {
                 body { background-color: #1e1e1e; color: #e6e6e6; }
                 h1 { border-bottom-color: #555; }

@@ -1,6 +1,6 @@
 import Foundation
 
-// Constants shared between the zMD app target and the zMDQuickLook extension target.
+// Constants shared between the Hashlight app target and the HashlightQuickLook extension target.
 // Lives outside SettingsManager.swift so the extension can compile MarkdownParser.swift without
 // dragging in SettingsManager (ObservableObject, AppKit fonts, UserDefaults state).
 
@@ -98,12 +98,12 @@ nonisolated struct MarkdownTableColumnConfiguration: Codable, Equatable, Sendabl
     }
 }
 
-/// Shared preferences bridge between zMD Viewer and its sandboxed Quick Look extension.
+/// Shared preferences bridge between Hashlight and its sandboxed Quick Look extension.
 nonisolated enum MarkdownTableColumnPreferences {
 #if DEBUG
-    static let sharedDomain = "com.zmd.viewer.debug.table-column-layout"
+    static let sharedDomain = "io.github.ib0ndar.hashlight.debug.table-column-layout"
 #else
-    static let sharedDomain = "com.zmd.viewer.table-column-layout"
+    static let sharedDomain = "io.github.ib0ndar.hashlight.table-column-layout"
 #endif
     static let sharedKey = "configuration-v1"
     static let appKey = "markdownTableColumnConfiguration.v1"
@@ -115,7 +115,7 @@ nonisolated enum MarkdownTableColumnPreferences {
     static func loadQuickLookDefaults() -> MarkdownTableColumnConfiguration {
         let sharedPreferences = UserDefaults(suiteName: sharedDomain)
         // Refresh this process's preference cache because Quick Look may reuse the extension
-        // process after zMD has written a newer snapshot.
+        // process after Hashlight has written a newer snapshot.
         _ = sharedPreferences?.synchronize()
         return load(from: sharedPreferences, key: sharedKey)
     }

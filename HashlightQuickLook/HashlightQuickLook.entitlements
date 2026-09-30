@@ -8,7 +8,7 @@
 	<true/>
 	<key>com.apple.security.temporary-exception.shared-preference.read-only</key>
 	<array>
-		<string>com.zmd.viewer.table-column-layout</string>
+		<string>io.github.ib0ndar.hashlight.table-column-layout</string>
 	</array>
 </dict>
 </plist>

@@ -1,7 +1,7 @@
 #!/bin/bash
 set -euo pipefail
 
-# Build the DMG for zMD Viewer with a drag-to-Applications layout.
+# Build the Hashlight DMG with a drag-to-Applications layout.
 # Usage: ./scripts/build-dmg.sh
 #
 # dmgbuild writes the disk-image window layout (size, background, icon positions) straight into
@@ -9,17 +9,16 @@ set -euo pipefail
 # on a Mac that opens new windows as tabs, Finder applies a layout window's bounds and view
 # settings to the user's existing window.
 #
-# The image is ad-hoc signed and not notarized. The viewer has no GitHub releases or updater; the
-# DMG is for installing a local build. NOTARIZE is accepted for compatibility and ignored.
+# The image is ad-hoc signed and not notarized. NOTARIZE is accepted for compatibility and ignored.
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 PROJECT_DIR="$(dirname "$SCRIPT_DIR")"
 REGISTRATION_MANAGER="$SCRIPT_DIR/manage-dev-registrations.sh"
 BUILD_DIR="$PROJECT_DIR/build"
 RELEASE_PRODUCTS_DIR="$PROJECT_DIR/build/Xcode/Release"
-DMG_PATH="$BUILD_DIR/zMD-Viewer.dmg"
-APP_NAME="zMD Viewer.app"
-VOLUME_NAME="zMD Viewer"
+DMG_PATH="$BUILD_DIR/Hashlight.dmg"
+APP_NAME="Hashlight.app"
+VOLUME_NAME="Hashlight"
 VENV_DIR="$BUILD_DIR/dmg-venv"
 DMGBUILD_REQUIREMENTS=("dmgbuild==1.6.7" "ds_store==1.3.3" "mac_alias==2.2.3")
 
@@ -42,7 +41,7 @@ echo "==> Building Release (ad-hoc signed)..."
 cd "$PROJECT_DIR"
 # Ad-hoc signing builds the app and its sandboxed Quick Look extension without a Developer ID
 # certificate; the extension's configured entitlements are still embedded.
-"$SCRIPT_DIR/xcodebuild-zmd.sh" -configuration Release \
+"$SCRIPT_DIR/xcodebuild-hashlight.sh" -configuration Release \
     CODE_SIGN_IDENTITY=- DEVELOPMENT_TEAM= CODE_SIGN_STYLE=Manual \
     OTHER_CODE_SIGN_FLAGS= CODE_SIGN_INJECT_BASE_ENTITLEMENTS=NO \
     build \

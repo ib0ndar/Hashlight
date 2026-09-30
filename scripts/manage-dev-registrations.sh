@@ -1,19 +1,18 @@
 #!/bin/bash
 set -euo pipefail
 
-# Audit and unregister zMD Viewer development bundles without deleting any files.
+# Audit and unregister Hashlight development bundles without deleting any files.
 #
 # Xcode's macOS build pipeline unconditionally runs Launch Services registration for app
 # products. Xcode 27's LSRegisterURL.xcspec exposes no option to disable that synthesized task,
 # so local builds must be isolated by bundle ID and explicitly unregistered when they finish.
 
 LSREGISTER="/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister"
-# Only the viewer's own identities. zMD (com.zmd.app*) is a separate product with its own copy of
-# this script on master; this one never touches its registrations.
-RELEASE_APP_ID="com.zmd.viewer"
-DEBUG_APP_ID="com.zmd.viewer.debug"
-RELEASE_EXTENSION_ID="com.zmd.viewer.QuickLook"
-DEBUG_EXTENSION_ID="com.zmd.viewer.debug.QuickLook"
+# Only Hashlight's own identities; other apps' registrations are never touched.
+RELEASE_APP_ID="io.github.ib0ndar.hashlight"
+DEBUG_APP_ID="io.github.ib0ndar.hashlight.debug"
+RELEASE_EXTENSION_ID="io.github.ib0ndar.hashlight.QuickLook"
+DEBUG_EXTENSION_ID="io.github.ib0ndar.hashlight.debug.QuickLook"
 
 usage() {
     cat <<'EOF'
@@ -23,10 +22,10 @@ Usage:
   ./scripts/manage-dev-registrations.sh refresh
 
 status
-  Lists every zMD Viewer app/Quick Look record currently visible to Launch Services or PlugInKit.
+  Lists every Hashlight app/Quick Look record currently visible to Launch Services or PlugInKit.
 
 unregister
-  Unregisters zMD Viewer copies outside /Applications and /System. It never deletes an app, build
+  Unregisters Hashlight copies outside /Applications and /System. It never deletes an app, build
   directory, source checkout, worktree, DMG, or Trash item. Use --include-installed only when
   deliberately removing the installed release app's registration as well.
 
@@ -48,7 +47,7 @@ require_tools() {
 
 launch_services_records() {
     local dump_path
-    dump_path="$(mktemp -t zmd-lsregister)"
+    dump_path="$(mktemp -t hashlight-lsregister)"
     "$LSREGISTER" -dump >"$dump_path"
 
     awk -v release_app="$RELEASE_APP_ID" \
@@ -115,11 +114,11 @@ is_installed_location() {
 
 show_status() {
     local records_path
-    records_path="$(mktemp -t zmd-registrations)"
+    records_path="$(mktemp -t hashlight-registrations)"
     all_records | sort -u >"$records_path"
 
     if [ ! -s "$records_path" ]; then
-        echo "No zMD Viewer app or Quick Look extension registrations found."
+        echo "No Hashlight app or Quick Look extension registrations found."
         rm -f "$records_path"
         return 0
     fi
@@ -135,8 +134,8 @@ unregister_records() {
     local include_installed="$1"
     local quiet="$2"
     local records_path remaining_path changed clean pass kind_order kind identifier bundle_path embedded_extension
-    records_path="$(mktemp -t zmd-registrations)"
-    remaining_path="$(mktemp -t zmd-registrations-remaining)"
+    records_path="$(mktemp -t hashlight-registrations)"
+    remaining_path="$(mktemp -t hashlight-registrations-remaining)"
     changed=0
     clean=0
 
@@ -170,7 +169,7 @@ unregister_records() {
                 [ -n "$bundle_path" ] || continue
 
                 if [ "$kind" = "app" ]; then
-                    embedded_extension="$bundle_path/Contents/PlugIns/zMDQuickLook.appex"
+                    embedded_extension="$bundle_path/Contents/PlugIns/HashlightQuickLook.appex"
                     if [ -d "$embedded_extension" ]; then
                         pluginkit -r "$embedded_extension" >/dev/null 2>&1 || true
                     fi
@@ -201,10 +200,10 @@ unregister_records() {
 
     rm -f "$records_path"
     if [ "$changed" = "0" ] && [ "$quiet" != "1" ]; then
-        echo "No removable zMD Viewer development registrations found."
+        echo "No removable Hashlight development registrations found."
     fi
     if [ "$clean" != "1" ] && [ -s "$remaining_path" ]; then
-        echo "ERROR: zMD Viewer development registrations remain after cleanup:" >&2
+        echo "ERROR: Hashlight development registrations remain after cleanup:" >&2
         while IFS=$'\t' read -r kind identifier bundle_path; do
             printf '  %s: %s (%s)\n' "$kind" "$bundle_path" "$identifier" >&2
         done <"$remaining_path"

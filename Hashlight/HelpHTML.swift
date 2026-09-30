@@ -38,10 +38,10 @@ enum HelpHTML {
         </style>
     </head>
     <body>
-        <h1>zMD Viewer Help</h1>
+        <h1>Hashlight Help</h1>
 
         <h2>Getting Started</h2>
-        <p>zMD Viewer is a lightweight macOS Markdown viewer for clean reading and professional document export. It never changes your files.</p>
+        <p>Hashlight is a lightweight macOS Markdown viewer for clean reading and professional document export. It never changes your files.</p>
 
         <h2>Opening Files</h2>
         <ul>
@@ -72,7 +72,7 @@ enum HelpHTML {
         </ul>
 
         <h2>Files That Change</h2>
-        <p>When another app saves an open file, its tab reloads automatically and keeps your reading position. If the file is deleted, zMD Viewer asks before closing the tab. <kbd>⌘R</kbd> reloads the current tab by hand.</p>
+        <p>When another app saves an open file, its tab reloads automatically and keeps your reading position. If the file is deleted, Hashlight asks before closing the tab. <kbd>⌘R</kbd> reloads the current tab by hand.</p>
 
         <h2>Customizing Appearance</h2>
         <p>Press <kbd>⌘,</kbd> to open Settings.</p>
@@ -146,7 +146,7 @@ enum HelpHTML {
         <ul>
             <li>Settings are automatically saved</li>
             <li>Use <kbd>⌘W</kbd> to close tabs - app stays open</li>
-            <li>zMD Viewer remembers where you were in each document</li>
+            <li>Hashlight remembers where you were in each document</li>
             <li>Export formats preserve formatting</li>
             <li>Recent files persist between launches</li>
         </ul>

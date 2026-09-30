@@ -28,7 +28,7 @@ enum ApplicationAppearance {
 }
 
 @main
-struct zMDApp: App {
+struct HashlightApp: App {
     @ObservedObject private var documentManager = DocumentManager.shared
     @ObservedObject private var settings = SettingsManager.shared
     @ObservedObject private var folderManager = FolderManager.shared
@@ -40,7 +40,7 @@ struct zMDApp: App {
     }
 
     var body: some Scene {
-        Window("zMD Viewer", id: "main") {
+        Window("Hashlight", id: "main") {
             ContentView()
                 .environmentObject(documentManager)
                 .environmentObject(folderManager)
@@ -91,7 +91,7 @@ struct zMDApp: App {
             }
 
             CommandGroup(replacing: .appTermination) {
-                Button("Quit zMD Viewer") {
+                Button("Quit Hashlight") {
                     NSApplication.shared.terminate(nil)
                 }
                 .keyboardShortcut("q", modifiers: .command)
@@ -299,7 +299,7 @@ struct zMDApp: App {
 
             // Help menu
             CommandGroup(replacing: .help) {
-                Button("zMD Viewer Help") {
+                Button("Hashlight Help") {
                     showingHelp = true
                 }
                 .keyboardShortcut("?", modifiers: .command)
@@ -380,7 +380,7 @@ class WindowCloseDelegate: NSObject, NSWindowDelegate {
     private var chromeCancellable: AnyCancellable?
 
     /// Mirror the selected document into the window's titlebar: title and proxy icon
-    /// (representedURL — drag-file-from-titlebar, ⌘-click path menu). zMD previously carried
+    /// (representedURL — drag-file-from-titlebar, ⌘-click path menu). The app previously carried
     /// document identity only in its own tab bar; the OS-level wayfinding affordances every
     /// macOS document app ships were absent.
     func attachWindowChrome(to window: NSWindow) {
@@ -398,7 +398,7 @@ class WindowCloseDelegate: NSObject, NSWindowDelegate {
         let doc = documentManager.selectedDocumentId.flatMap { id in
             documentManager.openDocuments.first(where: { $0.id == id })
         }
-        let title = doc?.name ?? "zMD Viewer"
+        let title = doc?.name ?? "Hashlight"
         let url = doc?.url
         // Equality guards: this runs on every DocumentManager publish (including find-bar
         // typing); actual window mutations must stay rare.

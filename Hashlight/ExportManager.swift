@@ -34,7 +34,7 @@ class ExportManager {
     static let shared = ExportManager()
     private let parser = MarkdownParser.shared
     private let alertManager = AlertManager.shared
-    private let docxExportQueue = DispatchQueue(label: "zMD.docxExport", qos: .userInitiated)
+    private let docxExportQueue = DispatchQueue(label: "Hashlight.docxExport", qos: .userInitiated)
 
     private init() {}
 
@@ -60,7 +60,7 @@ class ExportManager {
         let placeholderPrefix: String
 
         func placeholder(at index: Int) -> String {
-            "\(placeholderPrefix)\(index)ZMDEND"
+            "\(placeholderPrefix)\(index)HASHLIGHTEND"
         }
     }
 
@@ -78,7 +78,7 @@ class ExportManager {
             for m in matches {
                 if rangeIntersects(m.range, protectedRanges) { continue }
                 let latex = ns.substring(with: m.range(at: 1))
-                let placeholder = "\(placeholderPrefix)\(math.count)ZMDEND"
+                let placeholder = "\(placeholderPrefix)\(math.count)HASHLIGHTEND"
                 math.append((latex, true))
                 mutable.replaceCharacters(in: m.range, with: placeholder)
             }
@@ -93,7 +93,7 @@ class ExportManager {
             for m in matches {
                 if rangeIntersects(m.range, protectedRanges) { continue }
                 let latex = ns.substring(with: m.range(at: 1))
-                let placeholder = "\(placeholderPrefix)\(math.count)ZMDEND"
+                let placeholder = "\(placeholderPrefix)\(math.count)HASHLIGHTEND"
                 math.append((latex, false))
                 mutable.replaceCharacters(in: m.range, with: placeholder)
             }
@@ -106,7 +106,7 @@ class ExportManager {
         var prefix: String
         repeat {
             let token = UUID().uuidString.replacingOccurrences(of: "-", with: "")
-            prefix = "ZMDMATHPH_\(token)_"
+            prefix = "HASHLIGHTMATHPH_\(token)_"
         } while source.contains(prefix)
         return prefix
     }
@@ -169,7 +169,7 @@ class ExportManager {
     }
 
     /// Render each math expression to a base64 PNG `<img>` and substitute into the HTML where
-    /// the matching `ZMDMATHPHnZMDEND` placeholder appears. Forces light-theme glyphs so they
+    /// the matching `HASHLIGHTMATHPHnHASHLIGHTEND` placeholder appears. Forces light-theme glyphs so they
     /// stay readable on the white PDF/RTF page.
     private nonisolated func substituteMathPlaceholdersInHTML(_ html: String, extraction: MathExtraction) -> String {
         guard !extraction.math.isEmpty else { return html }

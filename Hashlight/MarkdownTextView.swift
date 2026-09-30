@@ -1595,7 +1595,7 @@ struct MarkdownTextView: NSViewRepresentable {
     /// passes (bold, italic, strike, link) skip ranges carrying this attribute so that
     /// `` `*foo*` `` renders with literal asterisks instead of treating them as italic markers.
     /// Cleared at the end of formatInlineMarkdown so it never leaks to the storage.
-    private static let codeSpanSentinel = NSAttributedString.Key("zMD.codeSpanSentinel")
+    private static let codeSpanSentinel = NSAttributedString.Key("Hashlight.codeSpanSentinel")
 
     private func formatInlineMarkdown(_ text: String, attributes: [NSAttributedString.Key: Any], stripCodeSpanSentinel: Bool = true) -> NSAttributedString {
         let result = NSMutableAttributedString()
@@ -1885,7 +1885,7 @@ final class PreviewTextView: NSTextView {
 
     // MARK: Code-block copy button
 
-    static let codeBlockKey = NSAttributedString.Key("zMD.codeBlock")
+    static let codeBlockKey = NSAttributedString.Key("Hashlight.codeBlock")
 
     private var hoverTrackingArea: NSTrackingArea?
     private var hoveredCodeBlock: CodeBlockPayload?

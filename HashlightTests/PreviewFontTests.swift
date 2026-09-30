@@ -1,6 +1,6 @@
 import AppKit
 import XCTest
-@testable import zMD
+@testable import Hashlight
 
 nonisolated final class PreviewFontTests: XCTestCase {
     @MainActor

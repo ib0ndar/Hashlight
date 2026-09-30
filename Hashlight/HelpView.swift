@@ -8,7 +8,7 @@ struct HelpView: View {
         VStack(spacing: 0) {
             // Header
             HStack {
-                Text("zMD Viewer Help")
+                Text("Hashlight Help")
                     .font(.system(size: 20, weight: .semibold))
                 Spacer()
                 // Visible, labeled close button. Previously this was an empty-title invisible

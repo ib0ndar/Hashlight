@@ -4,7 +4,7 @@ import SwiftUI
 /// A bundled Base16 palette mapped to the semantic roles used by the native Markdown preview.
 ///
 /// `base00...base07` are background/foreground steps and `base08...base0F` are syntax/accent
-/// colors. Keeping the source palette intact means zMD can consume the upstream Tinted Theming
+/// colors. Keeping the source palette intact means Hashlight can consume the upstream Tinted Theming
 /// catalog without inventing a separate theme format.
 struct PreviewTheme: Codable, Hashable, Identifiable, Sendable {
     struct Palette: Codable, Hashable, Sendable {
@@ -68,7 +68,7 @@ struct PreviewTheme: Codable, Hashable, Identifiable, Sendable {
     private static let systemLight = PreviewTheme(
         id: "system-light",
         name: "System",
-        author: "zMD",
+        author: "Hashlight",
         variant: "light",
         palette: Palette(
             base00: "#FFFFFF", base01: "#F6F8FA", base02: "#D0D7DE", base03: "#6E7781",
@@ -81,7 +81,7 @@ struct PreviewTheme: Codable, Hashable, Identifiable, Sendable {
     private static let systemDark = PreviewTheme(
         id: "system-dark",
         name: "System",
-        author: "zMD",
+        author: "Hashlight",
         variant: "dark",
         palette: Palette(
             base00: "#0D1117", base01: "#161B22", base02: "#30363D", base03: "#8B949E",

@@ -1,5 +1,5 @@
 import XCTest
-@testable import zMD
+@testable import Hashlight
 
 /// Characterization tests for `MarkdownParser.parse`/`.toHTML` block-level constructs.
 /// These pin the parser's *current* behavior (per its own simplified, non-CommonMark-complete
@@ -97,7 +97,7 @@ nonisolated final class MarkdownParserTests: XCTestCase {
         """
         let parser = MarkdownParser.shared
         let exportedHTML = parser.toHTML(markdown, includeStyles: false)
-        XCTAssertFalse(exportedHTML.contains("zmd-markdown-table"))
+        XCTAssertFalse(exportedHTML.contains("hashlight-markdown-table"))
         XCTAssertFalse(exportedHTML.contains("<colgroup>"))
 
         let quickLookHTML = parser.toHTML(
@@ -105,7 +105,7 @@ nonisolated final class MarkdownParserTests: XCTestCase {
             includeStyles: false,
             tableColumnConfiguration: .defaults
         )
-        XCTAssertTrue(quickLookHTML.contains(#"<table class="zmd-markdown-table">"#))
+        XCTAssertTrue(quickLookHTML.contains(#"<table class="hashlight-markdown-table">"#))
         XCTAssertTrue(quickLookHTML.contains(#"<colgroup><col style="width:"#))
         XCTAssertTrue(quickLookHTML.contains("</colgroup>"))
     }

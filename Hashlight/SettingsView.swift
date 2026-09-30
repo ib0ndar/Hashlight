@@ -226,7 +226,7 @@ struct AboutTab: View {
                 .resizable()
                 .frame(width: 80, height: 80)
 
-            Text("zMD Viewer")
+            Text("Hashlight")
                 .font(.system(size: 20, weight: .semibold))
 
             Text("Version \(Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "1.0")")
@@ -239,7 +239,7 @@ struct AboutTab: View {
 
             Spacer()
 
-            Text("Made with care by UMZCIO")
+            Text("Based on zMD by Zachary Rossmiller")
                 .font(.system(size: 11))
                 .foregroundStyle(Color.secondary.opacity(0.5))
                 .padding(.bottom, 12)

@@ -1,5 +1,5 @@
 import XCTest
-@testable import zMD
+@testable import Hashlight
 
 /// Tests for the Quick Look extension's pure helpers. `QuickLookHTML.swift` is compiled directly
 /// into this test bundle (an .appex cannot host XCTest), and is exercised against the real
@@ -83,10 +83,10 @@ nonisolated final class QuickLookHTMLTests: XCTestCase {
         )
         let safe = QuickLookHTML.makeOfflineSafe(raw)
 
-        XCTAssertTrue(safe.contains(#"<table class="zmd-markdown-table">"#))
+        XCTAssertTrue(safe.contains(#"<table class="hashlight-markdown-table">"#))
         XCTAssertTrue(safe.contains("<colgroup>"))
-        XCTAssertTrue(safe.contains(".zmd-markdown-table { table-layout: fixed; width: 100%; }"))
-        XCTAssertTrue(safe.contains(".zmd-markdown-table th, .zmd-markdown-table td { overflow-wrap: anywhere; }"))
+        XCTAssertTrue(safe.contains(".hashlight-markdown-table { table-layout: fixed; width: 100%; }"))
+        XCTAssertTrue(safe.contains(".hashlight-markdown-table th, .hashlight-markdown-table td { overflow-wrap: anywhere; }"))
         XCTAssertTrue(safe.contains("style-src 'unsafe-inline'"))
     }
 
@@ -96,7 +96,7 @@ nonisolated final class QuickLookHTMLTests: XCTestCase {
         | --- | --- |
         | 1 | 2 |
         """)
-        XCTAssertFalse(html.contains("zmd-markdown-table"))
+        XCTAssertFalse(html.contains("hashlight-markdown-table"))
         XCTAssertFalse(html.contains("<colgroup>"))
     }
 
@@ -154,7 +154,7 @@ nonisolated final class QuickLookHTMLTests: XCTestCase {
 
     func testReadPrefixCapsAndReportsTruncation() throws {
         let url = FileManager.default.temporaryDirectory
-            .appendingPathComponent("zmd-ql-\(UUID().uuidString).md")
+            .appendingPathComponent("hashlight-ql-\(UUID().uuidString).md")
         try Data(repeating: 0x61, count: 100).write(to: url)
         defer { try? FileManager.default.removeItem(at: url) }
 
@@ -172,7 +172,7 @@ nonisolated final class QuickLookHTMLTests: XCTestCase {
     }
 
     func testReadPrefixThrowsForMissingFile() {
-        let url = FileManager.default.temporaryDirectory.appendingPathComponent("zmd-ql-missing-\(UUID().uuidString).md")
+        let url = FileManager.default.temporaryDirectory.appendingPathComponent("hashlight-ql-missing-\(UUID().uuidString).md")
         XCTAssertThrowsError(try QuickLookHTML.readPrefix(of: url))
     }
 }

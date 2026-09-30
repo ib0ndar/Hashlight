@@ -1,6 +1,6 @@
 import SwiftUI
 import XCTest
-@testable import zMD
+@testable import Hashlight
 
 nonisolated final class InlineMarkdownTests: XCTestCase {
     @MainActor
@@ -132,11 +132,11 @@ nonisolated final class InlineMarkdownTests: XCTestCase {
 
     @MainActor
     func testMathExtractionDoesNotReuseUserAuthoredPlaceholderText() {
-        let extraction = ExportManager.shared.extractMathFromMarkdown("literal ZMDMATHPH0ZMDEND and $x + y$")
+        let extraction = ExportManager.shared.extractMathFromMarkdown("literal HASHLIGHTMATHPH0HASHLIGHTEND and $x + y$")
 
-        XCTAssertTrue(extraction.modified.contains("literal ZMDMATHPH0ZMDEND"))
+        XCTAssertTrue(extraction.modified.contains("literal HASHLIGHTMATHPH0HASHLIGHTEND"))
         XCTAssertEqual(extraction.math.count, 1)
-        XCTAssertNotEqual(extraction.placeholder(at: 0), "ZMDMATHPH0ZMDEND")
+        XCTAssertNotEqual(extraction.placeholder(at: 0), "HASHLIGHTMATHPH0HASHLIGHTEND")
         XCTAssertTrue(extraction.modified.contains(extraction.placeholder(at: 0)))
     }
 
@@ -159,7 +159,7 @@ nonisolated final class RuntimeSmokeTests: XCTestCase {
     @MainActor
     func testFileWatcherReportsEditsAcrossAtomicRenames() throws {
         let directory = FileManager.default.temporaryDirectory
-            .appendingPathComponent("zmd-filewatcher-\(UUID().uuidString)", isDirectory: true)
+            .appendingPathComponent("hashlight-filewatcher-\(UUID().uuidString)", isDirectory: true)
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: directory) }
 
@@ -191,7 +191,7 @@ nonisolated final class RuntimeSmokeTests: XCTestCase {
         let previousSelectedId = manager.selectedDocumentId
 
         let directory = FileManager.default.temporaryDirectory
-            .appendingPathComponent("zmd-reload-\(UUID().uuidString)", isDirectory: true)
+            .appendingPathComponent("hashlight-reload-\(UUID().uuidString)", isDirectory: true)
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
         let url = directory.appendingPathComponent("reload.md")
         try "# Before".write(to: url, atomically: true, encoding: .utf8)
@@ -242,7 +242,7 @@ nonisolated final class RuntimeSmokeTests: XCTestCase {
 
         let documentId = UUID()
         let url = FileManager.default.temporaryDirectory
-            .appendingPathComponent("zmd-close-\(UUID().uuidString).md")
+            .appendingPathComponent("hashlight-close-\(UUID().uuidString).md")
         let document = MarkdownDocument(id: documentId, url: url, content: "text")
         manager.openDocuments = [document]
         manager.selectedDocumentId = documentId
@@ -314,7 +314,7 @@ nonisolated final class FolderManagerTests: XCTestCase {
     @MainActor
     func testFolderScanDoesNotRecurseIntoSymlinkCycle() throws {
         let root = FileManager.default.temporaryDirectory
-            .appendingPathComponent("zmd-symlink-cycle-\(UUID().uuidString)", isDirectory: true)
+            .appendingPathComponent("hashlight-symlink-cycle-\(UUID().uuidString)", isDirectory: true)
         try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: root) }
 
@@ -489,7 +489,7 @@ nonisolated final class CodeBlockCopyTests: XCTestCase {
         layoutManager.ensureLayout(for: container)
 
         // Private pasteboard: the suite must never clobber the user's real clipboard.
-        let pasteboard = NSPasteboard(name: NSPasteboard.Name("zMD.tests.\(UUID().uuidString)"))
+        let pasteboard = NSPasteboard(name: NSPasteboard.Name("Hashlight.tests.\(UUID().uuidString)"))
         defer { pasteboard.releaseGlobally() }
         textView.pasteboard = pasteboard
 
@@ -610,7 +610,7 @@ nonisolated final class PreviewBehaviorTests: XCTestCase {
         let restore = preserveDocumentState()
         defer { restore() }
         let source = "# Plan\n\n- [ ] alpha\n- [x] beta\n"
-        let url = FileManager.default.temporaryDirectory.appendingPathComponent("zmd-tasks-\(UUID().uuidString).md")
+        let url = FileManager.default.temporaryDirectory.appendingPathComponent("hashlight-tasks-\(UUID().uuidString).md")
         _ = show(source, at: url)
 
         let harness = PreviewHarness()
@@ -647,7 +647,7 @@ nonisolated final class PreviewBehaviorTests: XCTestCase {
         let restore = preserveDocumentState()
         defer { restore() }
         let directory = FileManager.default.temporaryDirectory
-            .appendingPathComponent("zmd-scroll-\(UUID().uuidString)", isDirectory: true)
+            .appendingPathComponent("hashlight-scroll-\(UUID().uuidString)", isDirectory: true)
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: directory) }
         let url = directory.appendingPathComponent("long.md")
@@ -691,7 +691,7 @@ nonisolated final class PreviewBehaviorTests: XCTestCase {
         let restore = preserveDocumentState()
         defer { restore() }
         let source = "See [docs](http://x.example) first.\n\nUse http for local work.\n\nNever http in prod.\n"
-        let url = FileManager.default.temporaryDirectory.appendingPathComponent("zmd-find-\(UUID().uuidString).md")
+        let url = FileManager.default.temporaryDirectory.appendingPathComponent("hashlight-find-\(UUID().uuidString).md")
         _ = show(source, at: url)
         let manager = DocumentManager.shared
 
@@ -759,7 +759,7 @@ nonisolated final class FolderSearchTests: XCTestCase {
     }
 
     func testSearchAcrossFilesHonorsTheHitCapAndCancellation() throws {
-        let dir = FileManager.default.temporaryDirectory.appendingPathComponent("zmd-foldersearch-\(UUID().uuidString)")
+        let dir = FileManager.default.temporaryDirectory.appendingPathComponent("hashlight-foldersearch-\(UUID().uuidString)")
         try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: dir) }
 
@@ -869,7 +869,7 @@ nonisolated final class ReviewFixTests: XCTestCase {
             (manager.isSearching, manager.currentMatchIndex) = (saved.3, saved.4)
         }
 
-        let url = FileManager.default.temporaryDirectory.appendingPathComponent("zmd-reveal-\(UUID().uuidString).md")
+        let url = FileManager.default.temporaryDirectory.appendingPathComponent("hashlight-reveal-\(UUID().uuidString).md")
         let searched = "cat one\ncat two\n"
         // The file changed after the folder search read it: an occurrence was added above the
         // hit, so its index in the search results (1) is now 2 in the tab's text.
@@ -1000,8 +1000,8 @@ nonisolated final class MarkdownTableColumnLayoutTests: XCTestCase {
         XCTAssertNil(MarkdownTableColumnConfiguration.decodeSnapshot(Data("not json".utf8)))
 
         let suffix = UUID().uuidString
-        let appDomain = "com.zmd.tests.app.\(suffix)"
-        let quickLookDomain = "com.zmd.tests.ql.\(suffix)"
+        let appDomain = "io.github.ib0ndar.hashlight.tests.app.\(suffix)"
+        let quickLookDomain = "io.github.ib0ndar.hashlight.tests.ql.\(suffix)"
         let appDefaults = try XCTUnwrap(UserDefaults(suiteName: appDomain))
         let quickLookDefaults = try XCTUnwrap(UserDefaults(suiteName: quickLookDomain))
         defer {

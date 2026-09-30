@@ -7,7 +7,7 @@ require "open3"
 require "yaml"
 
 unless ARGV.length == 2
-  warn "Usage: update-base16-themes.rb /path/to/tinted-theming/schemes zMD/Resources/Base16Themes.json"
+  warn "Usage: update-base16-themes.rb /path/to/tinted-theming/schemes Hashlight/Resources/Base16Themes.json"
   exit 64
 end
 

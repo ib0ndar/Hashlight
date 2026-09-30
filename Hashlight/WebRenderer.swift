@@ -5,7 +5,7 @@ import CryptoKit
 /// No-op stub — replaces the debug-trace logging used to diagnose the headless-WebView
 /// requestAnimationFrame issue. Kept (vs deleted) so the call sites remain greppable; @inline
 /// makes the optimizer remove the calls in Release.
-@inline(__always) nonisolated func _zmdNoop(_ msg: String) { _ = msg }
+@inline(__always) nonisolated func _hashlightNoop(_ msg: String) { _ = msg }
 
 /// Headless WKWebView-based renderer for Mermaid diagrams and KaTeX math
 @MainActor
@@ -370,19 +370,19 @@ class WebRenderer: NSObject {
             prefix: "math-"
         )
         if let cached = imageCache.object(forKey: key as NSString) {
-            _zmdNoop("[WebRenderer] renderMath cache HIT for: \(latex)")
+            _hashlightNoop("[WebRenderer] renderMath cache HIT for: \(latex)")
             completion(cached)
             return
         }
 
         if !katexReady {
-            _zmdNoop("[WebRenderer] renderMath QUEUED (KaTeX not ready) for: \(latex)")
+            _hashlightNoop("[WebRenderer] renderMath QUEUED (KaTeX not ready) for: \(latex)")
             pendingKatex.append((latex, displayMode, forceLightTheme, foregroundHex, completion))
             setupKatexWebView()
             return
         }
 
-        _zmdNoop("[WebRenderer] renderMath EXECUTING for: \(latex)")
+        _hashlightNoop("[WebRenderer] renderMath EXECUTING for: \(latex)")
         executeKatexRender(
             latex: latex,
             displayMode: displayMode,
@@ -394,7 +394,7 @@ class WebRenderer: NSObject {
 
     private func setupKatexWebView() {
         guard katexWebView == nil else { return }
-        _zmdNoop("[WebRenderer] setupKatexWebView called")
+        _hashlightNoop("[WebRenderer] setupKatexWebView called")
 
         let config = WKWebViewConfiguration()
         let userContentController = WKUserContentController()
@@ -581,7 +581,7 @@ extension WebRenderer: WKScriptMessageHandler {
             completion?(imageFromBase64DataURL(bodyString))
 
         case "katexReady":
-            _zmdNoop("[WebRenderer] katexReady — flushing \(pendingKatex.count) pending render(s)")
+            _hashlightNoop("[WebRenderer] katexReady — flushing \(pendingKatex.count) pending render(s)")
             katexReady = true
             let pending = pendingKatex
             pendingKatex = []
@@ -597,9 +597,9 @@ extension WebRenderer: WKScriptMessageHandler {
 
         case "katexResult":
             cancelWatchdog(for: .katex)
-            _zmdNoop("[WebRenderer] katexResult received, body: \(bodyString.prefix(200))")
+            _hashlightNoop("[WebRenderer] katexResult received, body: \(bodyString.prefix(200))")
             if bodyString.hasPrefix("ERROR") {
-                _zmdNoop("[WebRenderer] katexResult ERROR")
+                _hashlightNoop("[WebRenderer] katexResult ERROR")
                 let completion = activeKatexCompletion
                 activeKatexCompletion = nil
                 completion?(nil)
@@ -609,19 +609,19 @@ extension WebRenderer: WKScriptMessageHandler {
                   let rect = try? JSONDecoder().decode(KatexRect.self, from: rectData),
                   rect.w > 0, rect.h > 0,
                   let webView = katexWebView else {
-                _zmdNoop("[WebRenderer] katexResult parse FAILED or webview nil")
+                _hashlightNoop("[WebRenderer] katexResult parse FAILED or webview nil")
                 let completion = activeKatexCompletion
                 activeKatexCompletion = nil
                 completion?(nil)
                 return
             }
-            _zmdNoop("[WebRenderer] takeSnapshot rect=\(rect.x),\(rect.y),\(rect.w),\(rect.h) webView.window=\(String(describing: webView.window))")
+            _hashlightNoop("[WebRenderer] takeSnapshot rect=\(rect.x),\(rect.y),\(rect.w),\(rect.h) webView.window=\(String(describing: webView.window))")
             let snapshotConfig = WKSnapshotConfiguration()
             snapshotConfig.rect = CGRect(x: rect.x, y: rect.y, width: rect.w + 1, height: rect.h)
             let cb = activeKatexCompletion
             activeKatexCompletion = nil
             webView.takeSnapshot(with: snapshotConfig) { image, error in
-                _zmdNoop("[WebRenderer] takeSnapshot result image=\(image != nil) error=\(String(describing: error))")
+                _hashlightNoop("[WebRenderer] takeSnapshot result image=\(image != nil) error=\(String(describing: error))")
                 cb?(image)
             }
 
@@ -635,16 +635,16 @@ extension WebRenderer: WKScriptMessageHandler {
 
 extension WebRenderer: WKNavigationDelegate {
     nonisolated func webView(_ webView: WKWebView, didFail navigation: WKNavigation!, withError error: Error) {
-        _zmdNoop("[WebRenderer] WKNav didFail: \(error)")
+        _hashlightNoop("[WebRenderer] WKNav didFail: \(error)")
     }
     nonisolated func webView(_ webView: WKWebView, didFailProvisionalNavigation navigation: WKNavigation!, withError error: Error) {
-        _zmdNoop("[WebRenderer] WKNav didFailProvisional: \(error)")
+        _hashlightNoop("[WebRenderer] WKNav didFailProvisional: \(error)")
     }
     nonisolated func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
-        _zmdNoop("[WebRenderer] WKNav didFinish")
+        _hashlightNoop("[WebRenderer] WKNav didFinish")
     }
     nonisolated func webView(_ webView: WKWebView, didStartProvisionalNavigation navigation: WKNavigation!) {
-        _zmdNoop("[WebRenderer] WKNav didStartProvisional")
+        _hashlightNoop("[WebRenderer] WKNav didStartProvisional")
     }
     nonisolated func webViewWebContentProcessDidTerminate(_ webView: WKWebView) {
         Task { @MainActor in

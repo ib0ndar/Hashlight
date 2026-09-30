@@ -1,7 +1,7 @@
 import Foundation
 
 /// Unified markdown parser used by ExportManager (export) and MarkdownTextView (rendering)
-/// This is the single source of truth for markdown parsing in zMD
+/// This is the single source of truth for markdown parsing in Hashlight
 /// Stateless and safe to share across rendering and background export workers.
 nonisolated final class MarkdownParser: Sendable {
     static let shared = MarkdownParser()
@@ -802,7 +802,7 @@ nonisolated final class MarkdownParser: Sendable {
             return "<div class=\"math-display\"><script type=\"math/tex; mode=display\">\(safeLatex)</script></div>\n"
         case .table(let rows):
             let columnCount = rows.map(\.count).max() ?? 0
-            let tableClass = tableColumnConfiguration == nil ? "" : " class=\"zmd-markdown-table\""
+            let tableClass = tableColumnConfiguration == nil ? "" : " class=\"hashlight-markdown-table\""
             var html = "<table\(tableClass)>\n"
             if let tableColumnConfiguration, columnCount > 0 {
                 let widths = MarkdownTableColumnLayout.widthPercentages(

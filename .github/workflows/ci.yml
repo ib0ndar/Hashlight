@@ -2,9 +2,9 @@ name: CI
 
 on:
   push:
-    branches: [master, viewer]
+    branches: [main]
   pull_request:
-    branches: [master, viewer]
+    branches: [main]
   workflow_dispatch:
 
 jobs:
@@ -31,7 +31,7 @@ jobs:
 
       - name: Build (Debug, unsigned)
         run: |
-          xcodebuild -project zMD.xcodeproj -scheme zMD -configuration Debug \
+          xcodebuild -project Hashlight.xcodeproj -scheme Hashlight -configuration Debug \
             CODE_SIGNING_ALLOWED=NO \
             CODE_SIGNING_REQUIRED=NO \
             CODE_SIGN_IDENTITY="" \
@@ -40,7 +40,7 @@ jobs:
 
       - name: Test (Debug, unsigned)
         run: |
-          xcodebuild -project zMD.xcodeproj -scheme zMD -configuration Debug \
+          xcodebuild -project Hashlight.xcodeproj -scheme Hashlight -configuration Debug \
             CODE_SIGNING_ALLOWED=NO \
             CODE_SIGNING_REQUIRED=NO \
             CODE_SIGN_IDENTITY="" \

@@ -10,8 +10,8 @@ struct PreviewFontOption: Identifiable, Hashable {
 /// The menus are built from installed font families so user-installed fonts work without
 /// hard-coding a small list that differs from one Mac to another.
 enum PreviewFontCatalog {
-    static let systemMainID = "__zmd_system_main__"
-    static let systemFixedID = "__zmd_system_fixed__"
+    static let systemMainID = "__hashlight_system_main__"
+    static let systemFixedID = "__hashlight_system_fixed__"
 
     private struct InstalledFamily {
         let name: String

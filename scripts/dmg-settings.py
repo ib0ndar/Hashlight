@@ -1,4 +1,4 @@
-# dmgbuild settings for zMD Viewer's drag-to-Applications disk image (used by scripts/build-dmg.sh).
+# dmgbuild settings for Hashlight's drag-to-Applications disk image (used by scripts/build-dmg.sh).
 # dmgbuild runs this file with `defines` holding the -D values passed by the build script.
 import os.path
 

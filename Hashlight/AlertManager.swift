@@ -1,7 +1,7 @@
 import SwiftUI
 import AppKit
 
-/// Centralized alert management for zMD Viewer.
+/// Centralized alert management for Hashlight.
 /// Wraps NSAlert for app-modal confirmation and error dialogs.
 /// Previously also exposed a `@Published currentAlert` + `AlertViewModifier` / `withAlertManager()`
 /// pipeline for SwiftUI-native alerts that no code actually consumed — that surface was removed
