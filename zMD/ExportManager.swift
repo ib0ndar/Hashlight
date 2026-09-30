@@ -1,0 +1,1453 @@
+import SwiftUI
+import AppKit
+import UniformTypeIdentifiers
+
+/// Bridges Main Actor WebRenderer results back to a waiting export worker. The lock protects both
+/// the image slots and timeout state; the unchecked conformance is limited to that invariant.
+private final class MathRenderResults: @unchecked Sendable {
+    private let lock = NSLock()
+    nonisolated(unsafe) private var images: [NSImage?]
+    nonisolated(unsafe) private var acceptsResults = true
+
+    nonisolated init(count: Int) {
+        images = Array(repeating: nil, count: count)
+    }
+
+    @MainActor
+    func store(_ image: NSImage?, at index: Int) {
+        lock.lock()
+        if acceptsResults {
+            images[index] = image
+        }
+        lock.unlock()
+    }
+
+    nonisolated func finish() -> [NSImage?] {
+        lock.lock()
+        defer { lock.unlock() }
+        acceptsResults = false
+        return images
+    }
+}
+
+class ExportManager {
+    static let shared = ExportManager()
+    private let parser = MarkdownParser.shared
+    private let alertManager = AlertManager.shared
+    private let docxExportQueue = DispatchQueue(label: "zMD.docxExport", qos: .userInitiated)
+
+    private init() {}
+
+    private func exportFileName(_ fileName: String, extension newExtension: String) -> String {
+        let baseName = (fileName as NSString).deletingPathExtension
+        let stem = baseName.isEmpty ? fileName : baseName
+        return "\(stem).\(newExtension)"
+    }
+
+    /// Strip `$..$` and `$$..$$` math from the SOURCE MARKDOWN before HTML conversion, replacing
+    /// each with a safe placeholder. Returns the modified markdown + an ordered list of math
+    /// expressions. Pair with `substituteMathPlaceholdersInHTML` after toHTML to swap the
+    /// placeholders for rendered `<img>` tags.
+    ///
+    /// Why not work on the HTML directly: the inline-formatting pass in `MarkdownParser.toHTML`
+    /// (bold/italic/strike) operates on every `*`/`_`/`~` it sees, including those INSIDE math
+    /// spans. A math span like `$*p < .05. **p < .01. ***p < .001.$` ends up with `<em>` and
+    /// `<strong>` tags woven through the LaTeX, which KaTeX then can't parse. Pre-extracting
+    /// at the markdown layer keeps the LaTeX pristine.
+    nonisolated struct MathExtraction: Sendable {
+        let modified: String
+        let math: [(latex: String, display: Bool)]
+        let placeholderPrefix: String
+
+        func placeholder(at index: Int) -> String {
+            "\(placeholderPrefix)\(index)ZMDEND"
+        }
+    }
+
+    nonisolated func extractMathFromMarkdown(_ markdown: String) -> MathExtraction {
+        var math: [(latex: String, display: Bool)] = []
+        let placeholderPrefix = Self.mathPlaceholderPrefix(avoiding: markdown)
+
+        // Display math first ($$..$$, may span newlines)
+        var modified = markdown
+        var protectedRanges = protectedMarkdownRanges(in: modified)
+        if let displayRegex = try? NSRegularExpression(pattern: #"\$\$([\s\S]+?)\$\$"#) {
+            let ns = modified as NSString
+            let matches = displayRegex.matches(in: modified, range: NSRange(location: 0, length: ns.length)).reversed()
+            let mutable = NSMutableString(string: modified)
+            for m in matches {
+                if rangeIntersects(m.range, protectedRanges) { continue }
+                let latex = ns.substring(with: m.range(at: 1))
+                let placeholder = "\(placeholderPrefix)\(math.count)ZMDEND"
+                math.append((latex, true))
+                mutable.replaceCharacters(in: m.range, with: placeholder)
+            }
+            modified = mutable as String
+        }
+        // Inline math — shared canonical pattern (C7).
+        protectedRanges = protectedMarkdownRanges(in: modified)
+        if let inlineRegex = try? NSRegularExpression(pattern: MarkdownParser.inlineMathPattern) {
+            let ns = modified as NSString
+            let matches = inlineRegex.matches(in: modified, range: NSRange(location: 0, length: ns.length)).reversed()
+            let mutable = NSMutableString(string: modified)
+            for m in matches {
+                if rangeIntersects(m.range, protectedRanges) { continue }
+                let latex = ns.substring(with: m.range(at: 1))
+                let placeholder = "\(placeholderPrefix)\(math.count)ZMDEND"
+                math.append((latex, false))
+                mutable.replaceCharacters(in: m.range, with: placeholder)
+            }
+            modified = mutable as String
+        }
+        return MathExtraction(modified: modified, math: math, placeholderPrefix: placeholderPrefix)
+    }
+
+    private nonisolated static func mathPlaceholderPrefix(avoiding source: String) -> String {
+        var prefix: String
+        repeat {
+            let token = UUID().uuidString.replacingOccurrences(of: "-", with: "")
+            prefix = "ZMDMATHPH_\(token)_"
+        } while source.contains(prefix)
+        return prefix
+    }
+
+    private nonisolated func protectedMarkdownRanges(in markdown: String) -> [NSRange] {
+        let ns = markdown as NSString
+        let fullRange = NSRange(location: 0, length: ns.length)
+        var ranges: [NSRange] = []
+        var inFence = false
+        var fenceStart = 0
+        var fenceMarker = ""
+
+        ns.enumerateSubstrings(in: fullRange, options: [.byLines, .substringNotRequired]) { _, lineRange, enclosingRange, _ in
+            let line = ns.substring(with: lineRange)
+            let trimmed = line.trimmingCharacters(in: .whitespaces)
+            if !inFence {
+                if let marker = Self.openingFenceMarker(in: trimmed) {
+                    inFence = true
+                    fenceStart = enclosingRange.location
+                    fenceMarker = marker
+                }
+            } else if Self.isClosingFence(trimmed, for: fenceMarker) {
+                ranges.append(NSRange(location: fenceStart, length: NSMaxRange(enclosingRange) - fenceStart))
+                inFence = false
+                fenceMarker = ""
+            }
+        }
+
+        if inFence {
+            ranges.append(NSRange(location: fenceStart, length: ns.length - fenceStart))
+        }
+
+        let fencedRanges = ranges
+        for pattern in [#"``([^`]+(?:`[^`]+)*)``"#, #"`[^`\n]+`"#] {
+            guard let regex = try? NSRegularExpression(pattern: pattern) else { continue }
+            for match in regex.matches(in: markdown, range: fullRange) where !rangeIntersects(match.range, fencedRanges) {
+                ranges.append(match.range)
+            }
+        }
+
+        return ranges
+    }
+
+    private nonisolated static func openingFenceMarker(in trimmedLine: String) -> String? {
+        guard let first = trimmedLine.first, first == "`" || first == "~" else { return nil }
+        let marker = String(trimmedLine.prefix { $0 == first })
+        return marker.count >= 3 ? marker : nil
+    }
+
+    private nonisolated static func isClosingFence(_ trimmedLine: String, for openingMarker: String) -> Bool {
+        guard let markerCharacter = openingMarker.first else { return false }
+        let closingMarker = String(trimmedLine.prefix { $0 == markerCharacter })
+        guard closingMarker.count >= openingMarker.count else { return false }
+        let remainder = trimmedLine.dropFirst(closingMarker.count)
+        return remainder.trimmingCharacters(in: .whitespaces).isEmpty
+    }
+
+    private nonisolated func rangeIntersects(_ range: NSRange, _ ranges: [NSRange]) -> Bool {
+        ranges.contains { NSIntersectionRange(range, $0).length > 0 }
+    }
+
+    /// Render each math expression to a base64 PNG `<img>` and substitute into the HTML where
+    /// the matching `ZMDMATHPHnZMDEND` placeholder appears. Forces light-theme glyphs so they
+    /// stay readable on the white PDF/RTF page.
+    private nonisolated func substituteMathPlaceholdersInHTML(_ html: String, extraction: MathExtraction) -> String {
+        guard !extraction.math.isEmpty else { return html }
+
+        let renderResults = MathRenderResults(count: extraction.math.count)
+        let group = DispatchGroup()
+
+        for (i, hit) in extraction.math.enumerated() {
+            group.enter()
+            DispatchQueue.main.async {
+                WebRenderer.shared.renderMath(hit.latex, displayMode: hit.display, forceLightTheme: true) { image in
+                    renderResults.store(image, at: i)
+                    group.leave()
+                }
+            }
+        }
+
+        _ = group.wait(timeout: .now() + 5)
+        let renderedImagesSnapshot = renderResults.finish()
+
+        var result = html
+        for (i, hit) in extraction.math.enumerated() {
+            let placeholder = extraction.placeholder(at: i)
+            let replacement: String = {
+                guard let img = renderedImagesSnapshot[i] else { return parser.escapeHTML(hit.latex) }
+                let targetHeight: CGFloat = hit.display ? 22 : 14
+                let aspect = img.size.height > 0 ? img.size.width / img.size.height : 1
+                let targetWidth = targetHeight * aspect
+                guard let resized = resizeImage(img, to: NSSize(width: targetWidth, height: targetHeight)),
+                      let png = resized.tiffRepresentation
+                        .flatMap({ NSBitmapImageRep(data: $0) })
+                        .flatMap({ $0.representation(using: .png, properties: [:]) }) else {
+                    return parser.escapeHTML(hit.latex)
+                }
+                let b64 = png.base64EncodedString()
+                let style = hit.display ? "display:block; margin:0.4em auto;" : "vertical-align:middle;"
+                return "<img src=\"data:image/png;base64,\(b64)\" width=\"\(Int(targetWidth))\" height=\"\(Int(targetHeight))\" style=\"\(style)\" alt=\"\(parser.escapeHTML(hit.latex))\">"
+            }()
+            result = result.replacingOccurrences(of: placeholder, with: replacement)
+        }
+        return result
+    }
+
+    /// Render an NSImage at exactly `size` (in points), letting AppKit downsample.
+    private nonisolated func resizeImage(_ image: NSImage, to size: NSSize) -> NSImage? {
+        let newImage = NSImage(size: size)
+        newImage.lockFocus()
+        NSGraphicsContext.current?.imageInterpolation = .high
+        image.draw(in: NSRect(origin: .zero, size: size),
+                   from: NSRect(origin: .zero, size: image.size),
+                   operation: .copy,
+                   fraction: 1.0)
+        newImage.unlockFocus()
+        return newImage
+    }
+
+    /// Strip CDN script/link tags and remote `<img src>` from HTML before handing it to
+    /// `NSAttributedString(html:)`. That initializer is a synchronous WebKit shim that fetches
+    /// network resources on the main thread; offline or with a slow CDN it hangs for seconds
+    /// per resource (H14). KaTeX/Mermaid scripts wouldn't run inside an attributed-string
+    /// rendering pass anyway, so dropping them is functionally a no-op for the rendered output.
+    private nonisolated func stripNetworkResourcesForAttributedString(_ html: String) -> String {
+        var result = html
+        // Strip <script>...</script> blocks (case-insensitive).
+        result = result.replacingOccurrences(
+            of: #"<script\b[^>]*>[\s\S]*?</script\s*>"#,
+            with: "",
+            options: [.regularExpression, .caseInsensitive]
+        )
+        // Self-closing/void <script> and <link>.
+        result = result.replacingOccurrences(
+            of: #"<(script|link)\b[^>]*/?>"#,
+            with: "",
+            options: [.regularExpression, .caseInsensitive]
+        )
+        // Drop <img> tags that point at http(s):// — they'd trigger a sync fetch.
+        result = result.replacingOccurrences(
+            of: #"<img\b[^>]*\bsrc\s*=\s*["']https?://[^"']*["'][^>]*/?>"#,
+            with: "",
+            options: [.regularExpression, .caseInsensitive]
+        )
+        return result
+    }
+
+    /// Rewrite `<img src="...">` paths to absolute file:// URLs relative to baseURL so PDF
+    /// export resolves images against the document's directory the same way preview does.
+    /// Without this `<img src="images/foo.png">` resolves against the process working
+    /// directory (typically `/`), and the image silently fails to render in PDF (M15).
+    private nonisolated func absolutizeImageSrcs(_ html: String, baseURL: URL?) -> String {
+        guard let baseDir = baseURL?.deletingLastPathComponent() else { return html }
+        let pattern = #"(<img\b[^>]*\bsrc\s*=\s*["'])([^"']+)(["'])"#
+        guard let regex = try? NSRegularExpression(pattern: pattern, options: .caseInsensitive) else { return html }
+        let ns = html as NSString
+        let matches = regex.matches(in: html, range: NSRange(location: 0, length: ns.length)).reversed()
+        let mutable = NSMutableString(string: html)
+        for m in matches where m.numberOfRanges == 4 {
+            let src = ns.substring(with: m.range(at: 2))
+            // Skip absolute URLs (http(s)://, file://, etc.), data: URIs, and rooted paths.
+            // data: has no "://", so the previous test treated base64 images as relative paths
+            // and prepended the document directory — silently dropping them from PDF/RTF.
+            if src.contains("://") || src.hasPrefix("/") || src.lowercased().hasPrefix("data:") { continue }
+            let decoded = src.removingPercentEncoding ?? src
+            let abs = baseDir.appendingPathComponent(decoded).absoluteString
+            let prefix = ns.substring(with: m.range(at: 1))
+            let suffix = ns.substring(with: m.range(at: 3))
+            mutable.replaceCharacters(in: m.range, with: "\(prefix)\(abs)\(suffix)")
+        }
+        return mutable as String
+    }
+
+    // MARK: - PDF Export
+    func exportToPDF(content: String, fileName: String, baseURL: URL? = nil) {
+        let savePanel = NSSavePanel()
+        savePanel.allowedContentTypes = [.pdf]
+        savePanel.nameFieldStringValue = exportFileName(fileName, extension: "pdf")
+        savePanel.title = "Export as PDF"
+
+        savePanel.begin { response in
+            guard response == .OK, let url = savePanel.url else { return }
+
+            // Pre-render math on a background queue (preRenderMathInHTML dispatches WebRenderer
+            // calls back to main and waits via semaphore — would deadlock if we waited on main).
+            // Then hop back to main for the PDF/CGContext work.
+            DispatchQueue.global(qos: .userInitiated).async {
+                // Extract math from MARKDOWN before HTML conversion so the inline-formatting
+                // pass doesn't weave <em>/<strong> into LaTeX containing `*` characters.
+                let extraction = self.extractMathFromMarkdown(content)
+                var html = self.parser.toHTML(extraction.modified, includeStyles: true)
+                html = self.absolutizeImageSrcs(html, baseURL: baseURL)
+                html = self.substituteMathPlaceholdersInHTML(html, extraction: extraction)
+                html = self.stripNetworkResourcesForAttributedString(html)
+
+                DispatchQueue.main.async {
+                do {
+                    guard let htmlData = html.data(using: .utf8) else {
+                        self.alertManager.showExportError("PDF", reason: "Failed to encode HTML content")
+                        return
+                    }
+
+                    // Convert HTML to attributed string
+                    let options: [NSAttributedString.DocumentReadingOptionKey: Any] = [
+                        .documentType: NSAttributedString.DocumentType.html,
+                        .characterEncoding: String.Encoding.utf8.rawValue
+                    ]
+
+                    guard let attributedString = NSAttributedString(html: htmlData, options: options, documentAttributes: nil) else {
+                        self.alertManager.showExportError("PDF", reason: "Failed to create styled content")
+                        return
+                    }
+
+                    // Create PDF context
+                    let pageSize = CGSize(width: 8.5 * 72, height: 11 * 72) // Letter size
+                    let pageRect = CGRect(origin: .zero, size: pageSize)
+                    let printInfo = NSPrintInfo()
+                    printInfo.paperSize = pageSize
+                    printInfo.leftMargin = 54 // 0.75 inches
+                    printInfo.rightMargin = 54
+                    printInfo.topMargin = 54
+                    printInfo.bottomMargin = 54
+
+                    // Calculate text bounds
+                    let textRect = NSRect(
+                        x: printInfo.leftMargin,
+                        y: printInfo.topMargin,
+                        width: pageSize.width - printInfo.leftMargin - printInfo.rightMargin,
+                        height: pageSize.height - printInfo.topMargin - printInfo.bottomMargin
+                    )
+
+                    let pdfData = NSMutableData()
+                    guard let consumer = CGDataConsumer(data: pdfData as CFMutableData) else {
+                        self.alertManager.showExportError("PDF", reason: "Failed to create PDF data consumer")
+                        return
+                    }
+
+                    var mediaBox = pageRect
+                    guard let context = CGContext(consumer: consumer, mediaBox: &mediaBox, nil) else {
+                        self.alertManager.showExportError("PDF", reason: "Failed to create PDF context")
+                        return
+                    }
+
+                    let nsContext = NSGraphicsContext(cgContext: context, flipped: true)
+                    let previousContext = NSGraphicsContext.current
+                    NSGraphicsContext.current = nsContext
+                    defer { NSGraphicsContext.current = previousContext }
+
+                    // Calculate total height needed
+                    let layoutManager = NSLayoutManager()
+                    let textContainer = NSTextContainer(size: CGSize(width: textRect.width, height: .greatestFiniteMagnitude))
+                    let textStorage = NSTextStorage(attributedString: attributedString)
+
+                    layoutManager.addTextContainer(textContainer)
+                    textStorage.addLayoutManager(layoutManager)
+
+                    let glyphRange = layoutManager.glyphRange(for: textContainer)
+                    _ = layoutManager.usedRect(for: textContainer)
+
+                    // Page by glyph range, not by clipping. Walk line fragments to compute the
+                    // glyph range that fits on each page, then `drawGlyphs(forGlyphRange:at:)`
+                    // to draw ONLY those glyphs. This avoids the clipping race where
+                    // NSAttributedString.draw renders into a wider rect and we relied on the
+                    // clip to hide the overflow — which sometimes painted the top of the next
+                    // line on the bottom of the current page (cut-then-repeat).
+                    let pageHeight = textRect.height
+                    var pageStartGlyph = layoutManager.glyphIndexForCharacter(at: 0)
+                    var pageStartY: CGFloat = 0
+                    let totalGlyphs = NSMaxRange(glyphRange)
+
+                    while pageStartGlyph < totalGlyphs {
+                        // Find largest glyph range whose lines all end ≤ pageStartY + pageHeight.
+                        let pageBottom = pageStartY + pageHeight
+                        var pageEndGlyph = pageStartGlyph
+                        var pageEndY = pageStartY
+                        var glyph = pageStartGlyph
+                        while glyph < totalGlyphs {
+                            var lineRange = NSRange()
+                            let frag = layoutManager.lineFragmentRect(forGlyphAt: glyph, effectiveRange: &lineRange)
+                            if frag.maxY > pageBottom { break }
+                            pageEndGlyph = NSMaxRange(lineRange)
+                            pageEndY = frag.maxY
+                            glyph = NSMaxRange(lineRange)
+                        }
+                        // If a single line is taller than pageHeight, force advance one line so
+                        // we make progress (still better than infinite loop).
+                        if pageEndGlyph == pageStartGlyph {
+                            var lineRange = NSRange()
+                            let frag = layoutManager.lineFragmentRect(forGlyphAt: pageStartGlyph, effectiveRange: &lineRange)
+                            pageEndGlyph = NSMaxRange(lineRange)
+                            pageEndY = frag.maxY
+                        }
+
+                        let pageGlyphRange = NSRange(location: pageStartGlyph, length: pageEndGlyph - pageStartGlyph)
+
+                        context.beginPage(mediaBox: &mediaBox)
+                        context.saveGState()
+                        // Flip CTM so our top-down coords match NSGraphicsContext(flipped: true).
+                        context.translateBy(x: 0, y: pageSize.height)
+                        context.scaleBy(x: 1, y: -1)
+
+                        // Anchor glyphs so the top of pageStartY lands at textRect.minY on the page.
+                        let origin = NSPoint(x: textRect.minX, y: textRect.minY - pageStartY)
+                        layoutManager.drawBackground(forGlyphRange: pageGlyphRange, at: origin)
+                        layoutManager.drawGlyphs(forGlyphRange: pageGlyphRange, at: origin)
+
+                        context.restoreGState()
+                        context.endPage()
+
+                        pageStartGlyph = pageEndGlyph
+                        pageStartY = pageEndY
+                    }
+
+                    context.closePDF()
+
+                    try pdfData.write(to: url)
+                    ToastManager.shared.show("Exported as PDF", style: .success)
+                } catch {
+                    self.alertManager.showExportError("PDF", error: error)
+                }
+                }
+            }
+        }
+    }
+
+    // MARK: - HTML Export
+    func exportToHTML(content: String, fileName: String, includeStyles: Bool = true) {
+        let savePanel = NSSavePanel()
+        savePanel.allowedContentTypes = [.html]
+        savePanel.nameFieldStringValue = exportFileName(fileName, extension: "html")
+        savePanel.title = includeStyles ? "Export as HTML" : "Export as HTML (without styles)"
+
+        savePanel.begin { response in
+            guard response == .OK, let url = savePanel.url else { return }
+
+            DispatchQueue.global(qos: .userInitiated).async {
+                let extraction = self.extractMathFromMarkdown(content)
+                var html = self.parser.toHTML(extraction.modified, includeStyles: includeStyles)
+                html = self.substituteMathPlaceholdersInHTML(html, extraction: extraction)
+
+                do {
+                    try html.write(to: url, atomically: true, encoding: .utf8)
+                    DispatchQueue.main.async {
+                        ToastManager.shared.show("Exported as HTML", style: .success)
+                    }
+                } catch {
+                    DispatchQueue.main.async {
+                        self.alertManager.showExportError("HTML", error: error)
+                    }
+                }
+            }
+        }
+    }
+
+    // MARK: - Word/RTF Export
+    func exportToWord(content: String, fileName: String, baseURL: URL? = nil) {
+        let savePanel = NSSavePanel()
+        savePanel.allowedContentTypes = [.rtf]
+        savePanel.nameFieldStringValue = exportFileName(fileName, extension: "rtf")
+        savePanel.title = "Export as RTF (Word Compatible)"
+
+        savePanel.begin { response in
+            guard response == .OK, let url = savePanel.url else { return }
+
+            // Pre-render math on a background queue so the semaphore wait doesn't deadlock
+            // with WebRenderer dispatching back to main. Then RTF gen on main.
+            DispatchQueue.global(qos: .userInitiated).async {
+                let extraction = self.extractMathFromMarkdown(content)
+                var html = self.parser.toHTML(extraction.modified, includeStyles: true)
+                html = self.absolutizeImageSrcs(html, baseURL: baseURL)
+                html = self.substituteMathPlaceholdersInHTML(html, extraction: extraction)
+                html = self.stripNetworkResourcesForAttributedString(html)
+
+                DispatchQueue.main.async {
+                    guard let data = html.data(using: .utf8) else {
+                        self.alertManager.showExportError("RTF", reason: "Failed to encode HTML content")
+                        return
+                    }
+
+                    guard let attributedString = NSAttributedString(
+                        html: data,
+                        options: [
+                            .documentType: NSAttributedString.DocumentType.html,
+                            .characterEncoding: String.Encoding.utf8.rawValue
+                        ],
+                        documentAttributes: nil
+                    ) else {
+                        self.alertManager.showExportError("RTF", reason: "Failed to create styled content")
+                        return
+                    }
+
+                    do {
+                        let rtfData = try attributedString.data(
+                            from: NSRange(location: 0, length: attributedString.length),
+                            documentAttributes: [.documentType: NSAttributedString.DocumentType.rtf]
+                        )
+                        try rtfData.write(to: url)
+                        ToastManager.shared.show("Exported as RTF", style: .success)
+                    } catch {
+                        self.alertManager.showExportError("RTF", error: error)
+                    }
+                }
+            }
+        }
+    }
+
+    // MARK: - DOCX Export (Custom Generator)
+    func exportToDOCX(content: String, fileName: String, baseURL: URL? = nil) {
+        let savePanel = NSSavePanel()
+        savePanel.allowedContentTypes = [UTType(filenameExtension: "docx")].compactMap { $0 }
+        savePanel.nameFieldStringValue = exportFileName(fileName, extension: "docx")
+        savePanel.title = "Export as Word Document (DOCX)"
+
+        savePanel.begin { response in
+            guard response == .OK, let url = savePanel.url else { return }
+
+            self.docxExportQueue.async {
+                do {
+                    try self.createCustomDOCX(content: content, outputURL: url, fileName: fileName, baseURL: baseURL)
+                    DispatchQueue.main.async {
+                        ToastManager.shared.show("Exported as Word", style: .success)
+                    }
+                } catch {
+                    DispatchQueue.main.async {
+                        self.alertManager.showExportError("DOCX", error: error)
+                    }
+                }
+            }
+        }
+    }
+
+    // Property to track hyperlinks and images during document generation
+    // Accessed only by work submitted to `docxExportQueue`. The queue is serial, so one export
+    // exclusively owns this relationship/counter state from reset through archive creation.
+    nonisolated(unsafe) private var hyperlinkRelationships: [(id: String, url: String)] = []
+    nonisolated(unsafe) private var imageRelationships: [(id: String, fileName: String, data: Data, ext: String)] = []
+    // Static relationships occupy rId1..rIdN (numbering, styles, settings, header, footer).
+    // L14: derived from `staticDOCXRelationshipCount` instead of a hardcoded literal so adding a
+    // new static relationship in `word/_rels/document.xml.rels` only needs that constant updated;
+    // hyperlink/image counters auto-shift to avoid collision.
+    private nonisolated static let staticDOCXRelationshipCount = 5
+    nonisolated(unsafe) private var nextHyperlinkId = staticDOCXRelationshipCount + 1
+    nonisolated(unsafe) private var nextImageId = 1
+    nonisolated(unsafe) private var numberedListCount = 0
+    nonisolated(unsafe) private var numberedListStarts: [Int] = []
+
+    private nonisolated func createCustomDOCX(content: String, outputURL: URL, fileName: String? = nil, baseURL: URL? = nil) throws {
+        // The per-export accumulators above live on the shared singleton and are safe ONLY
+        // because every caller funnels through the serial docxExportQueue. A second entry point
+        // that skips the queue would interleave relationship IDs across documents (the rId
+        // corruption class this code already had to fix once) — assert the invariant instead of
+        // trusting convention.
+        dispatchPrecondition(condition: .onQueue(docxExportQueue))
+        // Reset hyperlink and image tracking for new document
+        hyperlinkRelationships = []
+        imageRelationships = []
+        nextHyperlinkId = Self.staticDOCXRelationshipCount + 1
+        nextImageId = 1
+
+        // Create temporary directory for DOCX structure
+        let tempDir = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: tempDir, withIntermediateDirectories: true)
+
+        defer {
+            try? FileManager.default.removeItem(at: tempDir)
+        }
+
+        // Create DOCX directory structure
+        let wordDir = tempDir.appendingPathComponent("word")
+        let relsDir = tempDir.appendingPathComponent("_rels")
+        let wordRelsDir = wordDir.appendingPathComponent("_rels")
+
+        try FileManager.default.createDirectory(at: wordDir, withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(at: relsDir, withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(at: wordRelsDir, withIntermediateDirectories: true)
+
+        // Generate document.xml content
+        let documentXML = generateDocumentXML(markdown: content, baseURL: baseURL)
+        try documentXML.write(to: wordDir.appendingPathComponent("document.xml"), atomically: true, encoding: .utf8)
+
+        // Copy embedded images to word/media/
+        if !imageRelationships.isEmpty {
+            let mediaDir = wordDir.appendingPathComponent("media")
+            try FileManager.default.createDirectory(at: mediaDir, withIntermediateDirectories: true)
+            for img in imageRelationships {
+                try img.data.write(to: mediaDir.appendingPathComponent(img.fileName))
+            }
+        }
+
+        // Create [Content_Types].xml
+        var contentTypesXML = """
+        <?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+        <Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">
+            <Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>
+            <Default Extension="xml" ContentType="application/xml"/>
+        """
+        // Add image content types
+        let imageExts = Set(imageRelationships.map { $0.ext })
+        for ext in imageExts {
+            let contentType: String
+            switch ext {
+            case "png": contentType = "image/png"
+            case "jpg", "jpeg": contentType = "image/jpeg"
+            case "gif": contentType = "image/gif"
+            case "tiff", "tif": contentType = "image/tiff"
+            case "bmp": contentType = "image/bmp"
+            default: contentType = "image/png"
+            }
+            contentTypesXML += "\n    <Default Extension=\"\(ext)\" ContentType=\"\(contentType)\"/>"
+        }
+        contentTypesXML += """
+
+            <Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/>
+            <Override PartName="/word/numbering.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.numbering+xml"/>
+            <Override PartName="/word/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.styles+xml"/>
+            <Override PartName="/word/settings.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.settings+xml"/>
+            <Override PartName="/word/header1.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.header+xml"/>
+            <Override PartName="/word/footer1.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.footer+xml"/>
+        </Types>
+        """
+        try contentTypesXML.write(to: tempDir.appendingPathComponent("[Content_Types].xml"), atomically: true, encoding: .utf8)
+
+        // Create _rels/.rels
+        let mainRels = """
+        <?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+        <Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
+            <Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/>
+        </Relationships>
+        """
+        try mainRels.write(to: relsDir.appendingPathComponent(".rels"), atomically: true, encoding: .utf8)
+
+        // Create word/_rels/document.xml.rels
+        var documentRels = """
+        <?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+        <Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
+            <Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/numbering" Target="numbering.xml"/>
+            <Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/>
+            <Relationship Id="rId3" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/settings" Target="settings.xml"/>
+            <Relationship Id="rId4" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/header" Target="header1.xml"/>
+            <Relationship Id="rId5" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/footer" Target="footer1.xml"/>
+        """
+
+        for hyperlink in hyperlinkRelationships {
+            documentRels += "\n    <Relationship Id=\"\(hyperlink.id)\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/hyperlink\" Target=\"\(xmlEscape(hyperlink.url))\" TargetMode=\"External\"/>"
+        }
+
+        for img in imageRelationships {
+            documentRels += "\n    <Relationship Id=\"\(img.id)\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/image\" Target=\"media/\(img.fileName)\"/>"
+        }
+
+        documentRels += "\n</Relationships>"
+        try documentRels.write(to: wordRelsDir.appendingPathComponent("document.xml.rels"), atomically: true, encoding: .utf8)
+
+        // Create word/header1.xml
+        let docTitle = xmlEscape(fileName.map { ($0 as NSString).deletingPathExtension } ?? "Document")
+        let headerXML = """
+        <?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+        <w:hdr xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">
+            <w:p>
+                <w:pPr><w:jc w:val="right"/></w:pPr>
+                <w:r>
+                    <w:rPr><w:i/><w:iCs/><w:color w:val="888888"/><w:sz w:val="16"/><w:szCs w:val="16"/></w:rPr>
+                    <w:t>\(docTitle)</w:t>
+                </w:r>
+            </w:p>
+        </w:hdr>
+        """
+        try headerXML.write(to: wordDir.appendingPathComponent("header1.xml"), atomically: true, encoding: .utf8)
+
+        // Create word/footer1.xml with page numbers
+        let footerXML = """
+        <?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+        <w:ftr xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">
+            <w:p>
+                <w:pPr><w:jc w:val="center"/></w:pPr>
+                <w:r>
+                    <w:rPr><w:color w:val="888888"/><w:sz w:val="16"/><w:szCs w:val="16"/></w:rPr>
+                    <w:t xml:space="preserve">Page </w:t>
+                </w:r>
+                <w:r>
+                    <w:rPr><w:color w:val="888888"/><w:sz w:val="16"/><w:szCs w:val="16"/></w:rPr>
+                    <w:fldChar w:fldCharType="begin"/>
+                </w:r>
+                <w:r>
+                    <w:rPr><w:color w:val="888888"/><w:sz w:val="16"/><w:szCs w:val="16"/></w:rPr>
+                    <w:instrText>PAGE</w:instrText>
+                </w:r>
+                <w:r>
+                    <w:rPr><w:color w:val="888888"/><w:sz w:val="16"/><w:szCs w:val="16"/></w:rPr>
+                    <w:fldChar w:fldCharType="separate"/>
+                </w:r>
+                <w:r>
+                    <w:rPr><w:color w:val="888888"/><w:sz w:val="16"/><w:szCs w:val="16"/></w:rPr>
+                    <w:t>1</w:t>
+                </w:r>
+                <w:r>
+                    <w:rPr><w:color w:val="888888"/><w:sz w:val="16"/><w:szCs w:val="16"/></w:rPr>
+                    <w:fldChar w:fldCharType="end"/>
+                </w:r>
+            </w:p>
+        </w:ftr>
+        """
+        try footerXML.write(to: wordDir.appendingPathComponent("footer1.xml"), atomically: true, encoding: .utf8)
+
+        // Create word/settings.xml
+        let settingsXML = """
+        <?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+        <w:settings xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main" xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math" xmlns:o="urn:schemas-microsoft-com:office:office">
+            <w:defaultTabStop w:val="720"/>
+            <w:characterSpacingControl w:val="doNotCompress"/>
+            <w:compat>
+                <w:compatSetting w:name="compatibilityMode" w:uri="http://schemas.microsoft.com/office/word" w:val="15"/>
+            </w:compat>
+            <m:mathPr>
+                <m:mathFont m:val="Cambria Math"/>
+            </m:mathPr>
+        </w:settings>
+        """
+        try settingsXML.write(to: wordDir.appendingPathComponent("settings.xml"), atomically: true, encoding: .utf8)
+
+        // Create word/numbering.xml
+        // numId 1 = bullets (abstractNum 0), numId 2 = base numbered (abstractNum 1)
+        // numIds 3+ = separate numbered lists, each restarting at 1
+        var numberingXML = """
+        <?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+        <w:numbering xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">
+            <w:abstractNum w:abstractNumId="0">
+                <w:multiLevelType w:val="hybridMultilevel"/>
+                <w:lvl w:ilvl="0">
+                    <w:start w:val="1"/>
+                    <w:numFmt w:val="bullet"/>
+                    <w:lvlText w:val="\u{2022}"/>
+                    <w:lvlJc w:val="left"/>
+                    <w:pPr>
+                        <w:ind w:left="720" w:hanging="360"/>
+                    </w:pPr>
+                </w:lvl>
+                <w:lvl w:ilvl="1">
+                    <w:start w:val="1"/>
+                    <w:numFmt w:val="bullet"/>
+                    <w:lvlText w:val="\u{25CB}"/>
+                    <w:lvlJc w:val="left"/>
+                    <w:pPr>
+                        <w:ind w:left="1440" w:hanging="360"/>
+                    </w:pPr>
+                </w:lvl>
+                <w:lvl w:ilvl="2">
+                    <w:start w:val="1"/>
+                    <w:numFmt w:val="bullet"/>
+                    <w:lvlText w:val="\u{25AA}"/>
+                    <w:lvlJc w:val="left"/>
+                    <w:pPr>
+                        <w:ind w:left="2160" w:hanging="360"/>
+                    </w:pPr>
+                </w:lvl>
+            </w:abstractNum>
+            <w:abstractNum w:abstractNumId="1">
+                <w:multiLevelType w:val="hybridMultilevel"/>
+                <w:lvl w:ilvl="0">
+                    <w:start w:val="1"/>
+                    <w:numFmt w:val="decimal"/>
+                    <w:lvlText w:val="%1."/>
+                    <w:lvlJc w:val="left"/>
+                    <w:pPr>
+                        <w:ind w:left="720" w:hanging="360"/>
+                    </w:pPr>
+                </w:lvl>
+                <w:lvl w:ilvl="1">
+                    <w:start w:val="1"/>
+                    <w:numFmt w:val="lowerLetter"/>
+                    <w:lvlText w:val="%2."/>
+                    <w:lvlJc w:val="left"/>
+                    <w:pPr>
+                        <w:ind w:left="1440" w:hanging="360"/>
+                    </w:pPr>
+                </w:lvl>
+                <w:lvl w:ilvl="2">
+                    <w:start w:val="1"/>
+                    <w:numFmt w:val="lowerRoman"/>
+                    <w:lvlText w:val="%3."/>
+                    <w:lvlJc w:val="left"/>
+                    <w:pPr>
+                        <w:ind w:left="2160" w:hanging="360"/>
+                    </w:pPr>
+                </w:lvl>
+            </w:abstractNum>
+            <w:num w:numId="1">
+                <w:abstractNumId w:val="0"/>
+            </w:num>
+            <w:num w:numId="2">
+                <w:abstractNumId w:val="1"/>
+            </w:num>
+        """
+        // Add a <w:num> for each separate numbered list, with restart override honoring the
+        // source's leading integer (so a list opening with `4.` actually starts at 4 in Word).
+        for listIdx in 1...max(numberedListCount, 1) {
+            let numId = 2 + listIdx
+            let start = (listIdx <= numberedListStarts.count) ? numberedListStarts[listIdx - 1] : 1
+            numberingXML += "\n    <w:num w:numId=\"\(numId)\"><w:abstractNumId w:val=\"1\"/><w:lvlOverride w:ilvl=\"0\"><w:startOverride w:val=\"\(start)\"/></w:lvlOverride></w:num>"
+        }
+        numberingXML += "\n</w:numbering>"
+        try numberingXML.write(to: wordDir.appendingPathComponent("numbering.xml"), atomically: true, encoding: .utf8)
+
+        // Create word/styles.xml
+        let stylesXML = """
+        <?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+        <w:styles xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">
+            <w:docDefaults>
+                <w:rPrDefault>
+                    <w:rPr>
+                        <w:rFonts w:ascii="Arial" w:hAnsi="Arial" w:eastAsia="Arial" w:cs="Arial"/>
+                        <w:sz w:val="22"/>
+                        <w:szCs w:val="22"/>
+                        <w:lang w:val="en-US"/>
+                    </w:rPr>
+                </w:rPrDefault>
+                <w:pPrDefault/>
+            </w:docDefaults>
+            <w:style w:type="paragraph" w:default="1" w:styleId="Normal">
+                <w:name w:val="Normal"/>
+                <w:qFormat/>
+            </w:style>
+            <w:style w:type="paragraph" w:styleId="Heading1">
+                <w:name w:val="heading 1"/>
+                <w:uiPriority w:val="9"/>
+                <w:qFormat/>
+                <w:pPr>
+                    <w:spacing w:before="360" w:after="200"/>
+                    <w:outlineLvl w:val="0"/>
+                </w:pPr>
+                <w:rPr>
+                    <w:b/>
+                    <w:bCs/>
+                    <w:color w:val="6D2040"/>
+                    <w:sz w:val="32"/>
+                    <w:szCs w:val="32"/>
+                </w:rPr>
+            </w:style>
+            <w:style w:type="paragraph" w:styleId="Heading2">
+                <w:name w:val="heading 2"/>
+                <w:uiPriority w:val="9"/>
+                <w:qFormat/>
+                <w:pPr>
+                    <w:spacing w:before="280" w:after="160"/>
+                    <w:outlineLvl w:val="1"/>
+                </w:pPr>
+                <w:rPr>
+                    <w:b/>
+                    <w:bCs/>
+                    <w:color w:val="8C3A5A"/>
+                    <w:sz w:val="26"/>
+                    <w:szCs w:val="26"/>
+                </w:rPr>
+            </w:style>
+            <w:style w:type="paragraph" w:styleId="Heading3">
+                <w:name w:val="heading 3"/>
+                <w:uiPriority w:val="9"/>
+                <w:qFormat/>
+                <w:pPr>
+                    <w:spacing w:before="200" w:after="120"/>
+                    <w:outlineLvl w:val="2"/>
+                </w:pPr>
+                <w:rPr>
+                    <w:b/>
+                    <w:bCs/>
+                    <w:color w:val="A05070"/>
+                    <w:sz w:val="22"/>
+                    <w:szCs w:val="22"/>
+                </w:rPr>
+            </w:style>
+            <w:style w:type="paragraph" w:styleId="Heading4">
+                <w:name w:val="heading 4"/>
+                <w:uiPriority w:val="9"/>
+                <w:qFormat/>
+                <w:pPr>
+                    <w:outlineLvl w:val="3"/>
+                </w:pPr>
+                <w:rPr>
+                    <w:i/>
+                    <w:iCs/>
+                    <w:color w:val="6D2040"/>
+                </w:rPr>
+            </w:style>
+            <w:style w:type="character" w:default="1" w:styleId="DefaultParagraphFont">
+                <w:name w:val="Default Paragraph Font"/>
+                <w:uiPriority w:val="1"/>
+                <w:semiHidden/>
+            </w:style>
+            <w:style w:type="table" w:default="1" w:styleId="TableNormal">
+                <w:name w:val="Normal Table"/>
+                <w:uiPriority w:val="99"/>
+                <w:semiHidden/>
+                <w:tblPr>
+                    <w:tblInd w:w="0" w:type="dxa"/>
+                    <w:tblCellMar>
+                        <w:top w:w="0" w:type="dxa"/>
+                        <w:left w:w="108" w:type="dxa"/>
+                        <w:bottom w:w="0" w:type="dxa"/>
+                        <w:right w:w="108" w:type="dxa"/>
+                    </w:tblCellMar>
+                </w:tblPr>
+            </w:style>
+            <w:style w:type="paragraph" w:styleId="ListParagraph">
+                <w:name w:val="List Paragraph"/>
+                <w:qFormat/>
+                <w:pPr>
+                    <w:spacing w:before="20" w:after="80"/>
+                    <w:ind w:left="720"/>
+                </w:pPr>
+            </w:style>
+            <w:style w:type="character" w:styleId="Hyperlink">
+                <w:name w:val="Hyperlink"/>
+                <w:uiPriority w:val="99"/>
+                <w:rPr>
+                    <w:color w:val="0563C1"/>
+                    <w:u w:val="single"/>
+                </w:rPr>
+            </w:style>
+            <w:style w:type="paragraph" w:styleId="Code">
+                <w:name w:val="Code"/>
+                <w:basedOn w:val="Normal"/>
+                <w:pPr>
+                    <w:spacing w:after="0"/>
+                    <w:shd w:val="clear" w:color="auto" w:fill="F5F5F5"/>
+                </w:pPr>
+                <w:rPr>
+                    <w:rFonts w:ascii="Courier New" w:hAnsi="Courier New"/>
+                    <w:sz w:val="18"/>
+                    <w:szCs w:val="18"/>
+                </w:rPr>
+            </w:style>
+        </w:styles>
+        """
+        try stylesXML.write(to: wordDir.appendingPathComponent("styles.xml"), atomically: true, encoding: .utf8)
+
+        // Create ZIP archive
+        try createZipArchive(sourceURL: tempDir, destinationURL: outputURL)
+    }
+
+    // MARK: - DOCX Document XML Generation
+
+    private nonisolated func generateDocumentXML(markdown: String, baseURL: URL? = nil) -> String {
+        // Consumes the unified MarkdownParser element tree so DOCX export is bit-for-bit
+        // consistent with preview/HTML/RTF/print. The previous line-based generator diverged:
+        // H5/H6 lost, no frontmatter/mermaid/math/HTML block handling, ambiguous fence detection,
+        // table separator regex accepted data rows.
+        var xml = """
+        <?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+        <w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" xmlns:v="urn:schemas-microsoft-com:vml" xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:wp="http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing" xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:pic="http://schemas.openxmlformats.org/drawingml/2006/picture">
+            <w:body>
+        """
+
+        let elements = MarkdownParser.shared.parse(markdown)
+        var currentNumberedNumId = 2
+        numberedListCount = 0
+        numberedListStarts = []
+
+        for element in elements {
+            switch element {
+            case .heading1(let text): xml += createHeadingParagraph(text: text, level: 1)
+            case .heading2(let text): xml += createHeadingParagraph(text: text, level: 2)
+            case .heading3(let text): xml += createHeadingParagraph(text: text, level: 3)
+            case .heading4(let text): xml += createHeadingParagraph(text: text, level: 4)
+            case .heading5(let text): xml += createHeadingParagraph(text: text, level: 5)
+            case .heading6(let text): xml += createHeadingParagraph(text: text, level: 6)
+
+            case .paragraph(let text): xml += createNormalParagraph(text: text)
+
+            case .frontmatter(let lines):
+                // Render YAML frontmatter as a small shaded table-like block of key:value paragraphs.
+                for line in lines where !line.trimmingCharacters(in: .whitespaces).isEmpty {
+                    xml += createNormalParagraph(text: line)
+                }
+
+            case .list(let items):
+                // Assign a fresh numId each time we encounter an ordered-prefix run, and
+                // remember the run's first item's startNumber so the generated numbering.xml
+                // includes a matching <w:startOverride>. Without this, an ordered list opening
+                // with `4.` always rendered as `1.` in DOCX.
+                var inNumbered = false
+                for item in items {
+                    if item.isOrdered && !inNumbered {
+                        numberedListCount += 1
+                        currentNumberedNumId = 2 + numberedListCount
+                        numberedListStarts.append(item.startNumber ?? 1)
+                        inNumbered = true
+                    } else if !item.isOrdered && inNumbered {
+                        inNumbered = false
+                    }
+                    let numId = item.isOrdered ? currentNumberedNumId : 1
+                    let level = min(item.level, 2)
+                    xml += createListParagraph(text: item.text, numId: numId, level: level)
+                }
+
+            case .codeBlock(let code, _):
+                for line in code.components(separatedBy: "\n") {
+                    xml += createCodeParagraph(text: line)
+                }
+
+            case .mermaidBlock(let code):
+                // DOCX has no diagram renderer — emit as a code block so content is at least present.
+                for line in (["[Mermaid diagram]"] + code.components(separatedBy: "\n")) {
+                    xml += createCodeParagraph(text: line)
+                }
+
+            case .displayMath(let latex):
+                for line in (["[Math]"] + latex.components(separatedBy: "\n")) {
+                    xml += createCodeParagraph(text: line)
+                }
+
+            case .table(let rows):
+                xml += generateTableXML(rows: rows)
+
+            case .image(let alt, let path):
+                xml += createImageParagraph(path: path, alt: alt, baseURL: baseURL)
+
+            case .horizontalRule:
+                xml += createHorizontalRule()
+
+            case .blockquote(let text):
+                xml += createBlockquoteParagraph(text: text)
+
+            case .alert(let kind, let text):
+                xml += createAlertParagraphs(kind: kind, text: text)
+
+            case .htmlBlock(let html):
+                // Fallback: emit the raw HTML source as a paragraph so nothing disappears silently.
+                xml += createNormalParagraph(text: html)
+            }
+        }
+
+        xml += """
+                <w:sectPr>
+                    <w:headerReference w:type="default" r:id="rId4"/>
+                    <w:footerReference w:type="default" r:id="rId5"/>
+                    <w:pgSz w:w="12240" w:h="15840"/>
+                    <w:pgMar w:top="1440" w:right="1440" w:bottom="1440" w:left="1440" w:header="720" w:footer="720"/>
+                </w:sectPr>
+            </w:body>
+        </w:document>
+        """
+
+        return xml
+    }
+
+    /// Emit a full `<w:tbl>` block from parsed rows. First row is treated as the header.
+    private nonisolated func generateTableXML(rows: [[String]]) -> String {
+        guard !rows.isEmpty else { return "" }
+        let columnCount = rows.map { $0.count }.max() ?? 1
+        // Page width: 12240 - 1440 left - 1440 right = 9360 DXA
+        let tableWidth = 9360
+        let columnWidth = tableWidth / columnCount
+
+        var xml = "<w:tbl>"
+        xml += "<w:tblPr>"
+        xml += "<w:tblW w:w=\"\(tableWidth)\" w:type=\"dxa\"/>"
+        xml += "<w:tblBorders>"
+        xml += "<w:top w:val=\"single\" w:sz=\"4\" w:space=\"0\" w:color=\"auto\"/>"
+        xml += "<w:left w:val=\"single\" w:sz=\"4\" w:space=\"0\" w:color=\"auto\"/>"
+        xml += "<w:bottom w:val=\"single\" w:sz=\"4\" w:space=\"0\" w:color=\"auto\"/>"
+        xml += "<w:right w:val=\"single\" w:sz=\"4\" w:space=\"0\" w:color=\"auto\"/>"
+        xml += "<w:insideH w:val=\"single\" w:sz=\"4\" w:space=\"0\" w:color=\"auto\"/>"
+        xml += "<w:insideV w:val=\"single\" w:sz=\"4\" w:space=\"0\" w:color=\"auto\"/>"
+        xml += "</w:tblBorders>"
+        xml += "<w:tblCellMar>"
+        xml += "<w:left w:w=\"10\" w:type=\"dxa\"/>"
+        xml += "<w:right w:w=\"10\" w:type=\"dxa\"/>"
+        xml += "</w:tblCellMar>"
+        xml += "<w:tblLook w:val=\"0000\" w:firstRow=\"0\" w:lastRow=\"0\" w:firstColumn=\"0\" w:lastColumn=\"0\" w:noHBand=\"0\" w:noVBand=\"0\"/>"
+        xml += "</w:tblPr>"
+        xml += "<w:tblGrid>"
+        for _ in 0..<columnCount {
+            xml += "<w:gridCol w:w=\"\(columnWidth)\"/>"
+        }
+        xml += "</w:tblGrid>"
+
+        for (rowIndex, cells) in rows.enumerated() {
+            let isHeader = rowIndex == 0
+            xml += "<w:tr>"
+            for colIndex in 0..<columnCount {
+                let cellText = colIndex < cells.count ? cells[colIndex] : ""
+                xml += "<w:tc>"
+                xml += "<w:tcPr>"
+                xml += "<w:tcW w:w=\"\(columnWidth)\" w:type=\"dxa\"/>"
+                xml += "<w:tcBorders>"
+                xml += "<w:top w:val=\"single\" w:sz=\"1\" w:space=\"0\" w:color=\"AAAAAA\"/>"
+                xml += "<w:left w:val=\"single\" w:sz=\"1\" w:space=\"0\" w:color=\"AAAAAA\"/>"
+                xml += "<w:bottom w:val=\"single\" w:sz=\"1\" w:space=\"0\" w:color=\"AAAAAA\"/>"
+                xml += "<w:right w:val=\"single\" w:sz=\"1\" w:space=\"0\" w:color=\"AAAAAA\"/>"
+                xml += "</w:tcBorders>"
+                if isHeader {
+                    xml += "<w:shd w:val=\"clear\" w:color=\"auto\" w:fill=\"6D2040\"/>"
+                } else if rowIndex % 2 == 0 {
+                    xml += "<w:shd w:val=\"clear\" w:color=\"auto\" w:fill=\"E0E0E0\"/>"
+                }
+                xml += "<w:tcMar>"
+                xml += "<w:top w:w=\"60\" w:type=\"dxa\"/>"
+                xml += "<w:left w:w=\"100\" w:type=\"dxa\"/>"
+                xml += "<w:bottom w:w=\"60\" w:type=\"dxa\"/>"
+                xml += "<w:right w:w=\"100\" w:type=\"dxa\"/>"
+                xml += "</w:tcMar>"
+                xml += "</w:tcPr>"
+                xml += "<w:p>"
+                if isHeader {
+                    xml += createHeaderCellRun(text: cellText)
+                } else {
+                    xml += createRunsForFormattedText(cellText)
+                }
+                xml += "</w:p>"
+                xml += "</w:tc>"
+            }
+            xml += "</w:tr>"
+        }
+        xml += "</w:tbl>"
+        xml += "<w:p><w:pPr><w:spacing w:before=\"120\"/></w:pPr></w:p>"
+        return xml
+    }
+
+    // MARK: - DOCX Paragraph Helpers
+
+    private nonisolated func createHeadingParagraph(text: String, level: Int) -> String {
+        return """
+        <w:p><w:pPr><w:pStyle w:val="Heading\(level)"/></w:pPr>\(createRunsForFormattedText(text))</w:p>
+        """
+    }
+
+    private nonisolated func createNormalParagraph(text: String) -> String {
+        return """
+        <w:p><w:pPr><w:spacing w:after="160"/></w:pPr>\(createRunsForFormattedText(text))</w:p>
+        """
+    }
+
+    private nonisolated func createListParagraph(text: String, numId: Int, level: Int = 0) -> String {
+        return """
+        <w:p><w:pPr><w:pStyle w:val="ListParagraph"/><w:numPr><w:ilvl w:val="\(level)"/><w:numId w:val="\(numId)"/></w:numPr></w:pPr>\(createRunsForFormattedText(text))</w:p>
+        """
+    }
+
+    private nonisolated func createCodeParagraph(text: String) -> String {
+        return """
+        <w:p><w:pPr><w:pStyle w:val="Code"/></w:pPr><w:r><w:t xml:space="preserve">\(xmlEscape(text))</w:t></w:r></w:p>
+        """
+    }
+
+    private nonisolated func createBlockquoteParagraph(text: String) -> String {
+        return """
+        <w:p><w:pPr><w:pBdr><w:left w:val="single" w:sz="12" w:space="8" w:color="CCCCCC"/></w:pBdr><w:spacing w:after="120"/><w:ind w:left="360"/></w:pPr>\(createRunsForFormattedText(text, extraRunProperties: "<w:i/><w:color w:val=\"555555\"/>"))</w:p>
+        """
+    }
+
+    /// GitHub-style alert: a bold, kind-colored title paragraph followed by the body paragraphs,
+    /// all sharing a left border in the kind's color (Word draws adjacent same-border
+    /// paragraphs as one continuous bar).
+    private nonisolated func createAlertParagraphs(kind: MarkdownParser.AlertKind, text: String) -> String {
+        // Child order inside w:pPr is fixed by the schema (CT_PPr is a sequence): keepNext,
+        // then pBdr, then spacing, then ind. Word tolerates disorder; strict OOXML consumers
+        // (validators, converters) reject it or drop elements — e.g. losing keepNext would let
+        // the title orphan from its body at a page break.
+        let border = "<w:pBdr><w:left w:val=\"single\" w:sz=\"12\" w:space=\"8\" w:color=\"\(kind.hexColor)\"/></w:pBdr>"
+        let indent = "<w:ind w:left=\"360\"/>"
+        var xml = """
+        <w:p><w:pPr><w:keepNext/>\(border)<w:spacing w:after="60"/>\(indent)</w:pPr><w:r><w:rPr><w:b/><w:color w:val="\(kind.hexColor)"/></w:rPr><w:t>\(kind.title)</w:t></w:r></w:p>
+        """
+        for paragraph in MarkdownParser.alertParagraphs(text) {
+            xml += """
+            <w:p><w:pPr>\(border)<w:spacing w:after="120"/>\(indent)</w:pPr>\(createRunsForFormattedText(paragraph))</w:p>
+            """
+        }
+        return xml
+    }
+
+    private nonisolated func createHorizontalRule() -> String {
+        return """
+        <w:p><w:pPr><w:pBdr><w:bottom w:val="single" w:sz="6" w:space="1" w:color="CCCCCC"/></w:pBdr><w:spacing w:before="200" w:after="200"/></w:pPr></w:p>
+        """
+    }
+
+    private nonisolated func createImageParagraph(path: String, alt: String, baseURL: URL?) -> String {
+        // Resolve the image path. H17: a path like `images/foo.png` is RELATIVE to the doc;
+        // building `URL(fileURLWithPath:)` from it produced a URL relative to the process working
+        // directory (typically `/`), which spuriously matched `/images/foo.png` if it existed and
+        // missed the actual sibling file. Treat as relative unless rooted (`/`) or has a scheme;
+        // also percent-decode in case the markdown writer URL-encoded spaces etc.
+        let decodedPath = path.removingPercentEncoding ?? path
+        let isRooted = decodedPath.hasPrefix("/")
+        let hasScheme = decodedPath.contains("://")
+
+        let resolvedURL: URL?
+        if isRooted || hasScheme {
+            let absoluteURL = URL(fileURLWithPath: decodedPath)
+            resolvedURL = FileManager.default.fileExists(atPath: absoluteURL.path) ? absoluteURL : nil
+        } else if let base = baseURL?.deletingLastPathComponent() {
+            let relativeURL = base.appendingPathComponent(decodedPath)
+            resolvedURL = FileManager.default.fileExists(atPath: relativeURL.path) ? relativeURL : nil
+        } else {
+            resolvedURL = nil
+        }
+
+        guard let imageURL = resolvedURL,
+              let imageData = try? Data(contentsOf: imageURL),
+              let image = NSImage(data: imageData) else {
+            // Fallback: show alt text as placeholder
+            return createNormalParagraph(text: "[\(alt.isEmpty ? path : alt)]")
+        }
+
+        // Determine file extension
+        let ext = imageURL.pathExtension.lowercased()
+        let safeExt = ["png", "jpg", "jpeg", "gif", "tiff", "tif", "bmp"].contains(ext) ? ext : "png"
+
+        // Use image data directly (or re-encode if extension was unknown)
+        let finalData: Data
+        if safeExt == ext {
+            finalData = imageData
+        } else if let tiff = image.tiffRepresentation,
+                  let rep = NSBitmapImageRep(data: tiff),
+                  let png = rep.representation(using: .png, properties: [:]) {
+            finalData = png
+        } else {
+            return createNormalParagraph(text: "[\(alt.isEmpty ? path : alt)]")
+        }
+
+        // Register image
+        let rId = "rId\(nextHyperlinkId)"
+        nextHyperlinkId += 1
+        let imgFileName = "image\(nextImageId).\(safeExt)"
+        nextImageId += 1
+        imageRelationships.append((id: rId, fileName: imgFileName, data: finalData, ext: safeExt))
+
+        // Calculate dimensions in EMU (1 inch = 914400 EMU, 96 DPI assumed)
+        let pixelWidth = image.representations.first?.pixelsWide ?? Int(image.size.width)
+        let pixelHeight = image.representations.first?.pixelsHigh ?? Int(image.size.height)
+
+        // Max width = page width - margins = 6.5 inches = 5943600 EMU
+        let maxWidthEMU: Int = 5943600
+        var widthEMU = pixelWidth * 9525
+        var heightEMU = pixelHeight * 9525
+
+        if widthEMU > maxWidthEMU {
+            let scale = Double(maxWidthEMU) / Double(widthEMU)
+            widthEMU = maxWidthEMU
+            heightEMU = Int(Double(heightEMU) * scale)
+        }
+
+        let docPrId = nextImageId - 1
+
+        return """
+        <w:p><w:pPr><w:jc w:val="center"/><w:spacing w:before="120" w:after="120"/></w:pPr><w:r><w:drawing><wp:inline distT="0" distB="0" distL="0" distR="0"><wp:extent cx="\(widthEMU)" cy="\(heightEMU)"/><wp:docPr id="\(docPrId)" name="\(xmlEscape(alt.isEmpty ? imgFileName : alt))"/><a:graphic><a:graphicData uri="http://schemas.openxmlformats.org/drawingml/2006/picture"><pic:pic><pic:nvPicPr><pic:cNvPr id="0" name="\(xmlEscape(imgFileName))"/><pic:cNvPicPr/></pic:nvPicPr><pic:blipFill><a:blip r:embed="\(rId)"/><a:stretch><a:fillRect/></a:stretch></pic:blipFill><pic:spPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="\(widthEMU)" cy="\(heightEMU)"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom></pic:spPr></pic:pic></a:graphicData></a:graphic></wp:inline></w:drawing></w:r></w:p>
+        """
+    }
+
+    private nonisolated func createHeaderCellRun(text: String) -> String {
+        return createRunsForFormattedText(text, extraRunProperties: "<w:b/><w:bCs/><w:color w:val=\"FFFFFF\"/>")
+    }
+
+    nonisolated static func safeDOCXHyperlinkURL(_ url: String) -> String? {
+        let safeURL = MarkdownParser.sanitizeURLScheme(url)
+        if safeURL == "#" || safeURL.hasPrefix("#") { return nil }
+        return safeURL
+    }
+
+    private nonisolated func createRunsForFormattedText(_ text: String, extraRunProperties: String = "", allowLinks: Bool = true) -> String {
+        var result = ""
+
+        let content: String
+        if let taskMarker = taskListMarker(in: text) {
+            result += createSimpleRun(text: taskMarker.checked ? "\u{2611} " : "\u{2610} ", extraRunProperties: extraRunProperties)
+            content = taskMarker.remaining
+        } else {
+            content = text
+        }
+
+        for token in InlineMarkdown.tokenize(content) {
+            switch token {
+            case .text(let text):
+                result += createSimpleRun(text: text, extraRunProperties: extraRunProperties)
+            case .lineBreak:
+                result += createLineBreakRun(extraRunProperties: extraRunProperties)
+            case .code(let text):
+                result += createCodeRun(text: text, extraRunProperties: extraRunProperties)
+            case .math(let text):
+                result += createSimpleRun(text: "$\(text)$", extraRunProperties: extraRunProperties)
+            case .strong(let text):
+                result += createRunsForFormattedText(text, extraRunProperties: extraRunProperties + "<w:b/>", allowLinks: allowLinks)
+            case .emphasis(let text):
+                result += createRunsForFormattedText(text, extraRunProperties: extraRunProperties + "<w:i/>", allowLinks: allowLinks)
+            case .strikethrough(let text):
+                result += createRunsForFormattedText(text, extraRunProperties: extraRunProperties + "<w:strike/>", allowLinks: allowLinks)
+            case .highlight(let text):
+                result += createRunsForFormattedText(text, extraRunProperties: extraRunProperties + "<w:highlight w:val=\"yellow\"/>", allowLinks: allowLinks)
+            case .image(let alt, let source):
+                result += createSimpleRun(text: "[Image: \(alt.isEmpty ? source : alt)]", extraRunProperties: extraRunProperties)
+            case .link(let label, let destination):
+                if allowLinks {
+                    result += createLinkRun(text: label, url: destination, extraRunProperties: extraRunProperties)
+                } else {
+                    result += createRunsForFormattedText(label, extraRunProperties: extraRunProperties, allowLinks: false)
+                }
+            }
+        }
+
+        return result
+    }
+
+    private nonisolated func taskListMarker(in text: String) -> (checked: Bool, remaining: String)? {
+        guard let regex = try? NSRegularExpression(pattern: #"^\s*\[([ xX])\]\s+"#),
+              let match = regex.firstMatch(in: text, range: NSRange(text.startIndex..., in: text)),
+              let markerRange = Range(match.range(at: 1), in: text),
+              let fullRange = Range(match.range(at: 0), in: text) else {
+            return nil
+        }
+        return (String(text[markerRange]).lowercased() == "x", String(text[fullRange.upperBound...]))
+    }
+
+    private nonisolated func runProperties(_ properties: String) -> String {
+        properties.isEmpty ? "" : "<w:rPr>\(properties)</w:rPr>"
+    }
+
+    private nonisolated func createSimpleRun(text: String, extraRunProperties: String = "") -> String {
+        guard !text.isEmpty else { return "" }
+        return """
+            <w:r>
+                \(runProperties(extraRunProperties))
+                <w:t xml:space="preserve">\(xmlEscape(text))</w:t>
+            </w:r>
+        """
+    }
+
+    private nonisolated func createLineBreakRun(extraRunProperties: String = "") -> String {
+        return """
+            <w:r>
+                \(runProperties(extraRunProperties))
+                <w:br/>
+            </w:r>
+        """
+    }
+
+    private nonisolated func createFormattedRun(text: String, properties: String, extraRunProperties: String = "") -> String {
+        return """
+            <w:r>
+                <w:rPr>
+                    \(extraRunProperties)
+                    \(properties)
+                </w:rPr>
+                <w:t>\(xmlEscape(text))</w:t>
+            </w:r>
+        """
+    }
+
+    private nonisolated func createCodeRun(text: String, extraRunProperties: String = "") -> String {
+        return """
+            <w:r>
+                <w:rPr>
+                    \(extraRunProperties)
+                    <w:rFonts w:ascii="Courier New" w:hAnsi="Courier New"/>
+                    <w:shd w:val="clear" w:color="auto" w:fill="F5F5F5"/>
+                </w:rPr>
+                <w:t>\(xmlEscape(text))</w:t>
+            </w:r>
+        """
+    }
+
+    private nonisolated func createLinkRun(text: String, url: String, extraRunProperties: String = "") -> String {
+        guard let safeURL = Self.safeDOCXHyperlinkURL(url) else {
+            return createRunsForFormattedText(text, extraRunProperties: extraRunProperties, allowLinks: false)
+        }
+
+        // Generate unique relationship ID for this hyperlink
+        let rId = "rId\(nextHyperlinkId)"
+        nextHyperlinkId += 1
+
+        // Track this hyperlink for the relationships file
+        hyperlinkRelationships.append((id: rId, url: safeURL))
+        let linkRunProperties = extraRunProperties + "<w:color w:val=\"0563C1\"/><w:u w:val=\"single\"/>"
+
+        return """
+            <w:hyperlink r:id="\(rId)" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">
+                \(createRunsForFormattedText(text, extraRunProperties: linkRunProperties, allowLinks: false))
+            </w:hyperlink>
+        """
+    }
+
+    private nonisolated func xmlEscape(_ text: String) -> String {
+        // M12: XML 1.0 forbids most C0 controls. A markdown file containing U+0008 (or any
+        // C0 except tab/LF/CR) produces malformed document.xml that Word/LibreOffice refuse
+        // to open. Also drop U+FFFE/U+FFFF which are non-characters per Unicode.
+        let scrubbed = String(text.unicodeScalars.filter { scalar in
+            let v = scalar.value
+            if v == 0x09 || v == 0x0A || v == 0x0D { return true }    // allowed C0
+            if v < 0x20 { return false }                              // strip rest of C0
+            if v == 0xFFFE || v == 0xFFFF { return false }            // non-characters
+            return true
+        })
+        return scrubbed
+            .replacingOccurrences(of: "&", with: "&amp;")
+            .replacingOccurrences(of: "<", with: "&lt;")
+            .replacingOccurrences(of: ">", with: "&gt;")
+            .replacingOccurrences(of: "\"", with: "&quot;")
+            .replacingOccurrences(of: "'", with: "&apos;")
+    }
+
+    private nonisolated func createZipArchive(sourceURL: URL, destinationURL: URL) throws {
+        // Create ZIP in temp directory first (sandbox-safe), then move it
+        let tempZip = FileManager.default.temporaryDirectory.appendingPathComponent("\(UUID().uuidString).zip")
+
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: "/usr/bin/zip")
+        process.currentDirectoryURL = sourceURL
+        process.arguments = ["-r", "-X", tempZip.path, "."]
+
+        try process.run()
+
+        // L16: bound the wait so a stalled `/usr/bin/zip` (rare, but possible on full disks
+        // or APFS hiccups) doesn't wedge the main thread forever. Poll on a background queue;
+        // if the process is still alive after 30s, terminate and bail with a recognizable error.
+        let timeoutSec: TimeInterval = 30
+        let group = DispatchGroup()
+        group.enter()
+        DispatchQueue.global(qos: .userInitiated).async {
+            process.waitUntilExit()
+            group.leave()
+        }
+        let waitResult = group.wait(timeout: .now() + timeoutSec)
+        if waitResult == .timedOut {
+            process.terminate()
+            // Give it a moment to actually exit after SIGTERM, then SIGKILL if still alive.
+            _ = group.wait(timeout: .now() + 2)
+            if process.isRunning { kill(process.processIdentifier, SIGKILL) }
+            throw NSError(domain: "ExportManager", code: 2, userInfo: [NSLocalizedDescriptionKey: "ZIP creation timed out after \(Int(timeoutSec))s"])
+        }
+
+        guard process.terminationStatus == 0 else {
+            throw NSError(domain: "ExportManager", code: 1, userInfo: [NSLocalizedDescriptionKey: "Failed to create ZIP archive"])
+        }
+
+        // Remove existing file if it exists
+        if FileManager.default.fileExists(atPath: destinationURL.path) {
+            try FileManager.default.removeItem(at: destinationURL)
+        }
+
+        // Move the ZIP to the final destination (respects sandbox permissions)
+        try FileManager.default.moveItem(at: tempZip, to: destinationURL)
+    }
+
+}

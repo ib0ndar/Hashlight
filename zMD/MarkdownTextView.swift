@@ -1,0 +1,2134 @@
+import SwiftUI
+import AppKit
+
+/// NSTextView-based markdown renderer with full text selection support
+struct MarkdownTextView: NSViewRepresentable {
+    let content: String
+    let baseURL: URL?
+    let directoryBookmark: Data?
+    /// Identifies which open document this pane is currently displaying. Threaded through to
+    /// the Coordinator and stamped on every posted `.diagramRendered` notification so a
+    /// diagram/math render completing in one pane cannot invalidate another pane's cache
+    /// (Plan 003 — was previously a global, unscoped notification).
+    let documentId: UUID
+    @Binding var scrollToHeadingId: String?
+    let searchText: String
+    let currentMatchIndex: Int
+    let mainFontID: String
+    let fixedFontID: String
+    let theme: PreviewTheme
+    let zoomLevel: CGFloat
+    let initialScrollPosition: CGFloat
+    let onScrollPositionChanged: ((CGFloat) -> Void)?
+    let onMatchCountChanged: ((Int) -> Void)?
+    /// Horizontal placement of the text column within the pane (Settings → Appearance and the
+    /// status bar). Pure positioning — it never touches the attributed string, so changing it
+    /// costs a redraw, not a rebuild.
+    let contentAlignment: SettingsManager.ContentAlignment
+    /// Maximum width of the text column. Unlike alignment this DOES affect the build: images
+    /// and diagrams are sized once at build time, so it is part of the element-cache key.
+    let contentWidth: SettingsManager.ContentWidth
+    /// Horizontal page inset. Applied as view layout so changing it does not rebuild Markdown.
+    let pageMargin: SettingsManager.PageMargin
+    let tableColumnConfiguration: MarkdownTableColumnConfiguration
+
+    init(content: String, baseURL: URL?, directoryBookmark: Data? = nil, documentId: UUID, scrollToHeadingId: Binding<String?>, searchText: String, currentMatchIndex: Int, mainFontID: String, fixedFontID: String, theme: PreviewTheme, zoomLevel: CGFloat = 1.0, initialScrollPosition: CGFloat = 0, onScrollPositionChanged: ((CGFloat) -> Void)? = nil, onMatchCountChanged: ((Int) -> Void)? = nil, contentAlignment: SettingsManager.ContentAlignment = .left, contentWidth: SettingsManager.ContentWidth = .medium, pageMargin: SettingsManager.PageMargin = .normal, tableColumnConfiguration: MarkdownTableColumnConfiguration = .defaults) {
+        self.content = content
+        self.baseURL = baseURL
+        self.directoryBookmark = directoryBookmark
+        self.documentId = documentId
+        self._scrollToHeadingId = scrollToHeadingId
+        self.searchText = searchText
+        self.currentMatchIndex = currentMatchIndex
+        self.mainFontID = mainFontID
+        self.fixedFontID = fixedFontID
+        self.theme = theme
+        self.zoomLevel = zoomLevel
+        self.initialScrollPosition = initialScrollPosition
+        self.onScrollPositionChanged = onScrollPositionChanged
+        self.onMatchCountChanged = onMatchCountChanged
+        self.contentAlignment = contentAlignment
+        self.contentWidth = contentWidth
+        self.pageMargin = pageMargin
+        self.tableColumnConfiguration = tableColumnConfiguration
+    }
+
+    /// Everything besides content + zoom that changes what gets built.
+    private var styleKey: String {
+        "\(mainFontID)-\(fixedFontID)-\(contentWidth.rawValue)-\(theme.id)-\(tableColumnConfiguration.cacheKey)"
+    }
+
+    func makeNSView(context: Context) -> NSScrollView {
+        // PreviewTextView (bottom of this file) so the text column can be positioned
+        // left/center/right. scrollableTextView() instantiates the receiving class, so the
+        // factory's stock scroll-view configuration is unchanged.
+        let scrollView = PreviewTextView.scrollableTextView()
+        let textView = scrollView.documentView as! NSTextView
+        (textView as? PreviewTextView)?.contentAlignment = contentAlignment
+
+        // Configure text view
+        textView.isEditable = false
+        textView.isSelectable = true
+        textView.appearance = theme.appearance
+        textView.backgroundColor = theme.backgroundColor
+        scrollView.appearance = theme.appearance
+        scrollView.backgroundColor = theme.backgroundColor
+        scrollView.drawsBackground = true
+        textView.textContainerInset = NSSize(width: pageMargin.points, height: 40)
+        textView.isRichText = true
+        textView.allowsUndo = false
+
+        // Column width is owned by PreviewTextView: a maximum (Content Width setting) that
+        // shrinks to fit narrower panes. widthTracksTextView stays false — the view computes
+        // the width itself so it can cap it. (This used to be a hard 800pt, which clipped the
+        // right edge of every line in any pane under 900pt, such as Focus Mode.)
+        textView.textContainer?.widthTracksTextView = false
+        (textView as? PreviewTextView)?.preferredColumnWidth = contentWidth.points
+        context.coordinator.lastStyleKey = styleKey
+
+        // Enable link clicking
+        textView.isAutomaticLinkDetectionEnabled = false
+        textView.delegate = context.coordinator
+
+        // Store reference for coordinator
+        context.coordinator.textView = textView
+        context.coordinator.scrollView = scrollView
+        context.coordinator.baseURL = baseURL
+        context.coordinator.documentId = documentId
+        context.coordinator.onScrollPositionChanged = onScrollPositionChanged
+        context.coordinator.onMatchCountChanged = onMatchCountChanged
+
+        // Set up scroll notification
+        scrollView.contentView.postsBoundsChangedNotifications = true
+        NotificationCenter.default.addObserver(
+            context.coordinator,
+            selector: #selector(Coordinator.scrollViewDidScroll(_:)),
+            name: NSView.boundsDidChangeNotification,
+            object: scrollView.contentView
+        )
+
+        // Listen for diagram render completions. Registered with object: nil (rather than
+        // filtering here via NotificationCenter's own object-equality matching) because the
+        // poster's object is a UUID value type — NotificationCenter's object filter is not
+        // documented/reliable for value-type identity, so filtering happens explicitly inside
+        // diagramDidRender(_:) instead (Plan 003).
+        NotificationCenter.default.addObserver(
+            context.coordinator,
+            selector: #selector(Coordinator.diagramDidRender(_:)),
+            name: .diagramRendered,
+            object: nil
+        )
+
+        return scrollView
+    }
+
+    func updateNSView(_ scrollView: NSScrollView, context: Context) {
+        guard let textView = scrollView.documentView as? NSTextView else { return }
+
+        textView.appearance = theme.appearance
+        textView.backgroundColor = theme.backgroundColor
+        scrollView.appearance = theme.appearance
+        scrollView.backgroundColor = theme.backgroundColor
+
+        let desiredInsets = NSSize(width: pageMargin.points, height: 40)
+        if textView.textContainerInset != desiredInsets {
+            textView.textContainerInset = desiredInsets
+            (textView as? PreviewTextView)?.updateColumnWidthForCurrentInsets()
+        }
+
+        // Cheap: the setter no-ops when unchanged, and a change only invalidates the container
+        // origin + redraws (no rebuild — alignment isn't part of the attributed string).
+        (textView as? PreviewTextView)?.contentAlignment = contentAlignment
+        (textView as? PreviewTextView)?.preferredColumnWidth = contentWidth.points
+
+        // Captured BEFORE the reassignment below so we can tell a tab/document switch apart
+        // from a reload of the same document (Plan 009) — the coordinator is reused across
+        // document switches within a pane (see comment below), so `documentId` itself always
+        // reads as "current" by the time the debounce decision is made unless we snapshot the
+        // prior value first.
+        let previousDocumentId = context.coordinator.documentId
+
+        // Coordinator instances are reused across document switches within the same pane
+        // (same view identity, new `content`/`documentId` params) — refresh this on every
+        // pass so the diagram-render filter always reflects what's CURRENTLY displayed, not
+        // whichever document this pane showed when the NSView was first created (Plan 003).
+        context.coordinator.documentId = documentId
+
+        // Check if content changed
+        let contentChanged = context.coordinator.lastContent != content
+        let searchChanged = context.coordinator.lastSearchText != searchText
+        let matchIndexChanged = context.coordinator.lastMatchIndex != currentMatchIndex
+        let zoomChanged = context.coordinator.lastZoomLevel != zoomLevel
+        // Font style and content width both change what gets BUILT (fonts; image/diagram
+        // caps) without changing content or zoom. Font style previously had no trigger at
+        // all — switching it in Settings left the preview stale until the next edit or zoom.
+        let styleChanged = context.coordinator.lastStyleKey != styleKey
+        let documentSwitched = previousDocumentId != documentId
+        // `lastContent == nil` covers both "first render of a fresh/reused Coordinator" and
+        // "diagram-render-forced rebuild" (diagramDidRender resets `lastContent` to nil to force
+        // a rebuild, Plan 003) — neither is a reload, so both must rebuild immediately rather
+        // than ride the reload debounce below.
+        let isFreshOrForcedRebuild = context.coordinator.lastContent == nil
+
+        // Full rebuild when content or zoom changes. Debounce ONLY a same-document content
+        // change (the file was reloaded from disk; a tool rewriting it in bursts coalesces into
+        // one rebuild) with no zoom change — everything else (zoom, tab/document switch, first
+        // render, diagram-render-forced rebuild) rebuilds with zero delay (Plan 009).
+        if contentChanged || zoomChanged || styleChanged {
+            context.coordinator.lastZoomLevel = zoomLevel
+            context.coordinator.lastStyleKey = styleKey
+            let isReload = contentChanged && !zoomChanged && !styleChanged && !documentSwitched && !isFreshOrForcedRebuild
+            context.coordinator.scheduleRebuild(
+                for: self,
+                textView: textView,
+                scrollView: scrollView,
+                contentChanged: contentChanged,
+                isReload: isReload
+            )
+        }
+        // Lightweight search update — no full rebuild needed
+        else if searchChanged {
+            context.coordinator.lastSearchText = searchText
+
+            // Clear only the ranges we previously painted — as TEMPORARY attributes, matching
+            // how updateMatchHighlighting paints them. (A storage-level removeAttribute here
+            // would clear nothing — the highlights aren't in the storage — while still wiping
+            // the tracking list, orphaning the painted ranges forever. That was exactly the
+            // stuck-highlight-after-clearing-the-query bug.)
+            if let layoutManager = textView.layoutManager, let storage = textView.textStorage {
+                for r in context.coordinator.searchHighlightRanges where r.location + r.length <= storage.length {
+                    layoutManager.removeTemporaryAttribute(.backgroundColor, forCharacterRange: r)
+                    layoutManager.removeTemporaryAttribute(.foregroundColor, forCharacterRange: r)
+                }
+                context.coordinator.searchHighlightRanges.removeAll(keepingCapacity: true)
+            }
+
+            if !searchText.isEmpty {
+                context.coordinator.findMatchRanges(for: searchText, in: textView)
+                context.coordinator.updateMatchHighlighting(currentIndex: currentMatchIndex, in: textView, searchText: searchText)
+                if !context.coordinator.matchRanges.isEmpty {
+                    DispatchQueue.main.async {
+                        context.coordinator.scrollToMatch(at: currentMatchIndex, in: textView)
+                    }
+                }
+            } else {
+                context.coordinator.matchRanges = []
+                context.coordinator.reportMatchCount(0)
+            }
+        }
+        // Same query, same text: a folder-search hit opened in the document already showing
+        // this query still needs resolving against the existing matches.
+        else if !searchText.isEmpty {
+            context.coordinator.resolvePendingSearchReveal(for: searchText, in: textView)
+        }
+
+        // Handle match navigation (scroll and update highlight)
+        if matchIndexChanged && !searchText.isEmpty {
+            context.coordinator.lastMatchIndex = currentMatchIndex
+            context.coordinator.updateMatchHighlighting(currentIndex: currentMatchIndex, in: textView, searchText: searchText)
+            context.coordinator.scrollToMatch(at: currentMatchIndex, in: textView)
+        }
+
+        // Handle scroll to heading
+        if let headingId = scrollToHeadingId {
+            DispatchQueue.main.async {
+                context.coordinator.scrollToHeading(id: headingId, in: textView)
+                scrollToHeadingId = nil
+            }
+        }
+    }
+
+    func makeCoordinator() -> Coordinator {
+        Coordinator()
+    }
+
+    class Coordinator: NSObject, NSTextViewDelegate {
+        var textView: NSTextView?
+        var scrollView: NSScrollView?
+        var baseURL: URL?
+        // Which open document this pane is CURRENTLY displaying — refreshed on every
+        // updateNSView pass (see comment there). Used to filter incoming .diagramRendered
+        // notifications so a render belonging to a different document/pane is ignored (Plan 003).
+        var documentId: UUID?
+        var headingRanges: [String: NSRange] = [:]
+        var lastContent: String?
+        var lastSearchText: String?
+        var lastZoomLevel: CGFloat = 1.0
+        var lastStyleKey: String = ""
+        var lastMatchIndex: Int = -1
+        var matchRanges: [NSRange] = []
+        // Ranges currently painted with a search highlight. Tracked separately so we can clear
+        // only those backgrounds — previously the lightweight search-update path called
+        // `removeAttribute(.backgroundColor, range: 0..<storage.length)` and wiped legitimate
+        // backgrounds from inline-code spans, code blocks, and table cells. After H3 the only
+        // backgrounds removed are the ones search itself painted.
+        var searchHighlightRanges: [NSRange] = []
+        var onScrollPositionChanged: ((CGFloat) -> Void)?
+        var onMatchCountChanged: ((Int) -> Void)?
+        // nonisolated(unsafe) on the timers: all live access is on the main actor; the
+        // annotation exists solely so nonisolated deinit can invalidate them (deinit has
+        // exclusive access).
+        nonisolated(unsafe) private var scrollDebounceTimer: Timer?
+        // Coalesces the rebuild (full re-parse + NSAttributedString build) when the shown
+        // document reloads from disk, so a tool rewriting the file in bursts costs one rebuild
+        // instead of one per write (Plan 009).
+        nonisolated(unsafe) private var rebuildDebounceTimer: Timer?
+        nonisolated(unsafe) private var interruptibleScrollTimer: Timer?
+        // Image cache shared across renders
+        static var imageCache: NSCache<NSString, NSImage> = {
+            let cache = NSCache<NSString, NSImage>()
+            cache.countLimit = Cache.imageCountLimit
+            cache.totalCostLimit = Cache.imageByteLimit
+            return cache
+        }()
+        static var remoteImageInFlight: Set<String> = []
+        static var remoteImageFailures: Set<String> = []
+        // Diagram/math cache — uses the diagram-specific limits, which are much higher than
+        // the image limits because math images are tiny but appear in large numbers in
+        // technical docs (~300+ inline spans is common). Old shared image limit (100) thrashed.
+        static var diagramCache: NSCache<NSString, NSImage> = {
+            let cache = NSCache<NSString, NSImage>()
+            cache.countLimit = Cache.diagramCountLimit
+            cache.totalCostLimit = Cache.diagramByteLimit
+            return cache
+        }()
+        // Element-level rendering cache for incremental updates
+        var elementCache: [String: NSAttributedString] = [:]
+        var lastZoomKey: String = ""
+
+        // Scroll Y captured at the moment a diagram-render notification arrived. After the
+        // rebuild lands, updateNSView restores to this exact Y — preserving the user's scroll
+        // position rather than letting setAttributedString reset to 0 or anchor-based restore
+        // visibly shift it. The visible content at that Y may be slightly different post-rebuild
+        // (math images replaced text placeholders) but the viewport doesn't jump.
+        var pendingDiagramScrollY: CGFloat?
+
+        // MARK: - Preview Rebuild (debounced on reload, Plan 009)
+
+        /// Entry point `updateNSView` routes every full-rebuild trigger through. `isReload`
+        /// marks a new version of the document already on screen: it is debounced 150ms
+        /// (coalescing a burst of writes into one rebuild) and keeps the reader's scroll
+        /// position. Everything else — zoom changes, tab/document switches, first render, and
+        /// diagram-render-forced rebuilds (Plan 003) — lands with zero delay. `parent` is
+        /// captured as a value-type snapshot at the moment of the call, so a debounced timer
+        /// firing later always rebuilds against the content that was current when it was
+        /// (re)scheduled — each reload reschedules with the latest snapshot, so the final
+        /// version is never dropped.
+        func scheduleRebuild(for parent: MarkdownTextView, textView: NSTextView, scrollView: NSScrollView, contentChanged: Bool, isReload: Bool) {
+            guard isReload else {
+                rebuildDebounceTimer?.invalidate()
+                rebuildDebounceTimer = nil
+                performRebuild(for: parent, textView: textView, scrollView: scrollView, contentChanged: contentChanged, keepScrollPosition: false)
+                return
+            }
+            rebuildDebounceTimer?.invalidate()
+            rebuildDebounceTimer = Timer.scheduledTimer(withTimeInterval: 0.15, repeats: false) { [weak self] _ in
+                Task { @MainActor [weak self] in
+                    self?.rebuildDebounceTimer = nil
+                    self?.performRebuild(
+                        for: parent,
+                        textView: textView,
+                        scrollView: scrollView,
+                        contentChanged: contentChanged,
+                        keepScrollPosition: true
+                    )
+                }
+            }
+        }
+
+        /// Does the actual re-parse + NSAttributedString rebuild, plus every side effect that
+        /// used to sit directly in `updateNSView`'s `if contentChanged || zoomChanged` block
+        /// (search-match repopulation/highlighting, scroll-position restore, scroll-to-match) —
+        /// moved here so they run against the freshly rebuilt text storage regardless of whether
+        /// this was reached immediately or after the debounce delay.
+        private func performRebuild(for parent: MarkdownTextView, textView: NSTextView, scrollView: NSScrollView, contentChanged: Bool, keepScrollPosition: Bool) {
+            // Read at rebuild time, not when the reload was scheduled: the reader may have
+            // scrolled during the debounce.
+            let keptScrollY = keepScrollPosition ? scrollView.contentView.bounds.origin.y : nil
+            let (attributedString, headingRanges) = parent.buildAttributedString(coordinator: self)
+            textView.textStorage?.setAttributedString(attributedString)
+            self.headingRanges = headingRanges
+            self.lastContent = parent.content
+            self.lastSearchText = parent.searchText
+
+            // Find and store all match ranges in the rendered text
+            if !parent.searchText.isEmpty {
+                findMatchRanges(for: parent.searchText, in: textView)
+            } else {
+                matchRanges = []
+            }
+            // C6: paint the match ranges onto the freshly rebuilt storage.
+            updateMatchHighlighting(currentIndex: parent.currentMatchIndex, in: textView, searchText: parent.searchText)
+
+            // Restore scroll position after content is set (only on content change, not zoom)
+            if contentChanged {
+                DispatchQueue.main.async { [weak self] in
+                    guard let self = self else { return }
+                    if let pinY = self.pendingDiagramScrollY {
+                        // Diagram-render rebuild: clamp scroll back to the exact Y the user
+                        // was at before the rebuild.
+                        self.pendingDiagramScrollY = nil
+                        self.restoreScrollPosition(pinY, in: scrollView)
+                    } else if let keptScrollY {
+                        // Reload of the document on screen: stay where the reader is.
+                        self.restoreScrollPosition(keptScrollY, in: scrollView)
+                    } else if parent.initialScrollPosition > 10 && parent.searchText.isEmpty {
+                        self.restoreScrollPosition(parent.initialScrollPosition, in: scrollView)
+                    } else if parent.searchText.isEmpty {
+                        scrollView.contentView.scroll(to: NSPoint(x: 0, y: 0))
+                        scrollView.reflectScrolledClipView(scrollView.contentView)
+                    }
+                }
+            }
+
+            // Scroll to the current match if searching — except on a reload, which keeps the
+            // reader's position.
+            if !parent.searchText.isEmpty && !matchRanges.isEmpty && keptScrollY == nil {
+                DispatchQueue.main.async { [weak self] in
+                    self?.scrollToMatch(at: parent.currentMatchIndex, in: textView)
+                }
+            }
+        }
+
+        func scrollToHeading(id: String, in textView: NSTextView) {
+            guard let range = headingRanges[id],
+                  let layoutManager = textView.layoutManager,
+                  let textContainer = textView.textContainer,
+                  let scrollView = textView.enclosingScrollView else { return }
+
+            // Calculate target position
+            let glyphRange = layoutManager.glyphRange(forCharacterRange: range, actualCharacterRange: nil)
+            let headingRect = layoutManager.boundingRect(forGlyphRange: glyphRange, in: textContainer)
+            let inset = textView.textContainerInset
+            let targetY = headingRect.origin.y + inset.height - 20 // 20px above heading
+            let maxY = max(0, textView.frame.height - scrollView.contentView.bounds.height)
+            let clampedY = min(max(0, targetY), maxY)
+
+            // Interruptible scroll — replaces the NSAnimationContext.animator() tween, which
+            // could not be grabbed: a wheel/trackpad scroll during the 0.3s flight fought the
+            // animation instead of cancelling it. The driver below yields to user input on
+            // the next frame (see startInterruptibleScroll).
+            startInterruptibleScroll(to: clampedY, in: scrollView, duration: Motion.reduceMotion ? 0 : 0.3)
+
+            // Briefly highlight the heading. The text storage can be rebuilt while the delayed
+            // clear is pending, so validate the captured range before touching the selection.
+            let storageLength = textView.textStorage?.length ?? textView.string.utf16.count
+            guard NSMaxRange(range) <= storageLength else { return }
+            textView.setSelectedRange(range)
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+                let currentLength = textView.textStorage?.length ?? textView.string.utf16.count
+                guard range.location <= currentLength else { return }
+                textView.setSelectedRange(NSRange(location: range.location, length: 0))
+            }
+        }
+
+        func restoreScrollPosition(_ position: CGFloat, in scrollView: NSScrollView) {
+            guard let documentView = scrollView.documentView else { return }
+            let maxScroll = max(0, documentView.frame.height - scrollView.contentView.bounds.height)
+            let clampedPosition = min(position, maxScroll)
+            scrollView.contentView.scroll(to: NSPoint(x: 0, y: clampedPosition))
+            scrollView.reflectScrolledClipView(scrollView.contentView)
+        }
+
+        // MARK: - Link Handling
+
+        func textView(_ textView: NSTextView, clickedOnLink link: Any, at charIndex: Int) -> Bool {
+            let url: URL?
+            if let linkURL = link as? URL {
+                url = linkURL
+            } else if let linkString = link as? String {
+                url = URL(string: linkString)
+            } else {
+                return false
+            }
+
+            guard let url = url else { return false }
+
+            // Handle relative .md links by opening as a new tab
+            if ["md", "markdown"].contains(url.pathExtension.lowercased()),
+               let base = baseURL?.deletingLastPathComponent() {
+                let resolved = base.appendingPathComponent(url.relativeString).standardizedFileURL
+                // S3: confine the resolved path to the document's directory subtree. Without this,
+                // a crafted link like [x](../../../../private.md) resolves outside the folder and
+                // would be opened. The trailing-slash form prevents a sibling-prefix false match
+                // (e.g. base "/a/notes" vs "/a/notes-secret/x.md").
+                let baseDir = base.standardizedFileURL
+                let basePrefix = baseDir.path.hasSuffix("/") ? baseDir.path : baseDir.path + "/"
+                guard resolved.path == baseDir.path || resolved.path.hasPrefix(basePrefix) else {
+                    return false
+                }
+                if FileManager.default.fileExists(atPath: resolved.path) {
+                    DocumentManager.shared.loadDocument(from: resolved)
+                    return true
+                }
+            }
+
+            // Open external URLs in default browser
+            if url.scheme == "http" || url.scheme == "https" || url.scheme == "mailto" {
+                NSWorkspace.shared.open(url)
+                return true
+            }
+
+            return false
+        }
+
+        // MARK: - Interruptible programmatic scroll
+
+        /// Frame-driven eased scroll that the USER can grab: each tick checks whether the clip
+        /// view is still where the previous tick left it — if not, the user scrolled mid-flight
+        /// and the driver yields immediately (their input wins, no fighting, no completion
+        /// hand-back). NSAnimationContext.animator() could not do this: nothing cancels a
+        /// Core-Animation-driven bounds change when wheel deltas arrive.
+        private struct InterruptibleScrollState {
+            let startY: CGFloat
+            let targetY: CGFloat
+            let startTime: Date
+            let duration: TimeInterval
+        }
+        private var interruptibleScrollState: InterruptibleScrollState?
+        private var interruptibleScrollLastAppliedY: CGFloat = -1
+
+        func startInterruptibleScroll(to targetY: CGFloat, in scrollView: NSScrollView, duration: TimeInterval) {
+            cancelInterruptibleScroll()
+            guard duration > 0 else {
+                scrollView.contentView.setBoundsOrigin(NSPoint(x: 0, y: targetY))
+                scrollView.reflectScrolledClipView(scrollView.contentView)
+                return
+            }
+            let startY = scrollView.contentView.bounds.origin.y
+            interruptibleScrollState = InterruptibleScrollState(
+                startY: startY, targetY: targetY, startTime: Date.now, duration: duration
+            )
+            interruptibleScrollLastAppliedY = startY
+            interruptibleScrollTimer = Timer.scheduledTimer(withTimeInterval: 1.0 / 60.0, repeats: true) { [weak self, weak scrollView] _ in
+                Task { @MainActor [weak self, weak scrollView] in
+                    guard let scrollView else {
+                        self?.cancelInterruptibleScroll()
+                        return
+                    }
+                    self?.interruptibleScrollTick(scrollView)
+                }
+            }
+        }
+
+        private func interruptibleScrollTick(_ scrollView: NSScrollView) {
+            guard let state = interruptibleScrollState else {
+                cancelInterruptibleScroll()
+                return
+            }
+            let currentY = scrollView.contentView.bounds.origin.y
+            // The clip view moved between our frames — that's user input. Yield.
+            if abs(currentY - interruptibleScrollLastAppliedY) > 0.5 {
+                cancelInterruptibleScroll()
+                return
+            }
+            let t = min(1.0, Date.now.timeIntervalSince(state.startTime) / state.duration)
+            // easeInOut, matching the curve the old NSAnimationContext used.
+            let eased = t < 0.5 ? 2 * t * t : 1 - pow(-2 * t + 2, 2) / 2
+            let y = state.startY + (state.targetY - state.startY) * eased
+            scrollView.contentView.setBoundsOrigin(NSPoint(x: 0, y: y))
+            scrollView.reflectScrolledClipView(scrollView.contentView)
+            interruptibleScrollLastAppliedY = scrollView.contentView.bounds.origin.y
+            if t >= 1.0 {
+                cancelInterruptibleScroll()
+            }
+        }
+
+        private func cancelInterruptibleScroll() {
+            interruptibleScrollTimer?.invalidate()
+            interruptibleScrollTimer = nil
+            interruptibleScrollState = nil
+        }
+
+        // MARK: - Search Methods
+
+        /// Deliver the match count on the next runloop turn. All callers run inside
+        /// updateNSView — i.e. during the SwiftUI update pass — and the callback writes a
+        /// @Published property on DocumentManager; publishing synchronously from within a view
+        /// update is undefined behavior (dropped updates, runtime warning).
+        func reportMatchCount(_ count: Int) {
+            let cb = onMatchCountChanged
+            DispatchQueue.main.async { cb?(count) }
+        }
+
+        /// Literal, case-insensitive matches of `searchText` in the rendered text — the same
+        /// matching folder search uses, so a folder-search hit always has a rendered match.
+        func findMatchRanges(for searchText: String, in textView: NSTextView) {
+            matchRanges = []
+            guard let storage = textView.textStorage, !searchText.isEmpty else {
+                reportMatchCount(0)
+                return
+            }
+
+            let string = storage.string as NSString
+            var searchRange = NSRange(location: 0, length: string.length)
+            while searchRange.location < string.length {
+                let range = string.range(of: searchText, options: .caseInsensitive, range: searchRange)
+                guard range.location != NSNotFound else { break }
+                matchRanges.append(range)
+                // Advance by at least one character to avoid infinite loops on zero-length matches.
+                let advance = max(1, range.length)
+                searchRange.location = range.location + advance
+                searchRange.length = max(0, string.length - searchRange.location)
+            }
+
+            // Report match count back (deferred — see reportMatchCount)
+            reportMatchCount(matchRanges.count)
+
+            // Queued AFTER the count report on the same FIFO main queue, so it lands after
+            // setRenderedMatchCount's clamp — and after any stale count for a previous query —
+            // and therefore has the last word on the index.
+            resolvePendingSearchReveal(for: searchText, in: textView)
+        }
+
+        /// A folder-search hit waiting to be located in THIS rendered text: pick the rendered
+        /// match that corresponds to it and make it the current match.
+        func resolvePendingSearchReveal(for searchText: String, in textView: NSTextView) {
+            // A reload is about to replace the text; the rebuild resolves it against the new matches.
+            guard rebuildDebounceTimer == nil,
+                  let storage = textView.textStorage,
+                  let reveal = DocumentManager.shared.takePendingSearchReveal(documentId: documentId, query: searchText)
+            else { return }
+            let index = FolderSearch.renderedMatchIndex(
+                snippet: reveal.snippet, matchStart: reveal.matchStart, matchLength: reveal.matchLength,
+                rendered: storage.string as NSString, matchRanges: matchRanges, fallback: reveal.sourceOccurrence
+            )
+            DispatchQueue.main.async {
+                DocumentManager.shared.currentMatchIndex = index
+            }
+        }
+
+        func scrollToMatch(at index: Int, in textView: NSTextView) {
+            guard index >= 0 && index < matchRanges.count else { return }
+            let range = matchRanges[index]
+
+            // Clear any selection so it doesn't override the yellow highlight
+            textView.setSelectedRange(NSRange(location: range.location, length: 0))
+
+            // Get the rect for this text range
+            guard let layoutManager = textView.layoutManager,
+                  let textContainer = textView.textContainer else {
+                textView.scrollRangeToVisible(range)
+                return
+            }
+
+            // Get the bounding rect for the match
+            let glyphRange = layoutManager.glyphRange(forCharacterRange: range, actualCharacterRange: nil)
+            let matchRect = layoutManager.boundingRect(forGlyphRange: glyphRange, in: textContainer)
+
+            // Adjust for the text container's position. textContainerOrigin, not
+            // textContainerInset: with center/right content alignment the container's x is no
+            // longer the inset width.
+            let containerOrigin = textView.textContainerOrigin
+            let adjustedRect = NSRect(
+                x: matchRect.origin.x + containerOrigin.x,
+                y: matchRect.origin.y + containerOrigin.y,
+                width: matchRect.width,
+                height: matchRect.height
+            )
+
+            // Get the scroll view and its visible height
+            guard let scrollView = textView.enclosingScrollView else {
+                textView.scrollRangeToVisible(range)
+                return
+            }
+
+            let visibleHeight = scrollView.contentView.bounds.height
+
+            // Calculate scroll position to center the match vertically
+            let targetY = adjustedRect.origin.y - (visibleHeight / 2) + (adjustedRect.height / 2)
+            let maxY = max(0, textView.frame.height - visibleHeight)
+            let clampedY = min(max(0, targetY), maxY)
+
+            // Scroll to center the match
+            scrollView.contentView.scroll(to: NSPoint(x: 0, y: clampedY))
+            scrollView.reflectScrolledClipView(scrollView.contentView)
+        }
+
+        func updateMatchHighlighting(currentIndex: Int, in textView: NSTextView, searchText: String) {
+            guard let layoutManager = textView.layoutManager,
+                  let storage = textView.textStorage else { return }
+
+            // Paint search highlights as the layout manager's TEMPORARY attributes, never
+            // into the text storage. Storage-level painting caused a visible bug: the black
+            // .foregroundColor forced onto matches could not be reliably cleared (the
+            // original token color is unknown at clear time), so every character that
+            // matched an earlier prefix of the query ("h", "hi", …) stayed permanently
+            // black — invisible in dark mode — until the next full rebuild. Temporary
+            // attributes are render-only overlays; removing them restores the underlying
+            // storage attributes exactly, with no bookkeeping of original colors needed.
+            for r in searchHighlightRanges where r.location + r.length <= storage.length {
+                layoutManager.removeTemporaryAttribute(.backgroundColor, forCharacterRange: r)
+                layoutManager.removeTemporaryAttribute(.foregroundColor, forCharacterRange: r)
+            }
+            searchHighlightRanges.removeAll(keepingCapacity: true)
+
+            // Re-apply highlighting to all matches
+            for (index, range) in matchRanges.enumerated() {
+                guard range.location + range.length <= storage.length else { continue }
+                let isCurrent = index == currentIndex
+                let bgColor = isCurrent ? NSColor.systemOrange : NSColor.systemYellow.withAlphaComponent(0.5)
+                layoutManager.addTemporaryAttributes([
+                    .backgroundColor: bgColor,
+                    .foregroundColor: NSColor.black
+                ], forCharacterRange: range)
+                searchHighlightRanges.append(range)
+            }
+        }
+
+        // Debounce diagram-render notifications so a doc with N Mermaid/KaTeX blocks doesn't
+        // force N full rebuilds during initial open (M2). 100ms is below the perceptible-flicker
+        // threshold and comfortably groups the burst from a normal multi-diagram doc.
+        nonisolated(unsafe) private var diagramCoalesceTimer: Timer?
+
+        // Plan 003: every open pane's coordinator registers for this notification (object: nil
+        // — see registration comment in makeNSView), so without filtering, a diagram/math
+        // render completing in ANY tab/pane would clear every OTHER open pane's elementCache
+        // and force a full re-parse, even for documents with no diagrams at all. Filter to only
+        // the document this pane is currently displaying.
+        @objc func diagramDidRender(_ notification: Notification) {
+            guard let renderedDocumentId = notification.object as? UUID,
+                  let myDocumentId = self.documentId,
+                  renderedDocumentId == myDocumentId else { return }
+            diagramCoalesceTimer?.invalidate()
+            diagramCoalesceTimer = Timer.scheduledTimer(withTimeInterval: 0.1, repeats: false) { [weak self] _ in
+                Task { @MainActor [weak self] in
+                    guard let self else { return }
+                    // Re-check identity at fire time, not just at notification-arrival time.
+                    guard self.documentId == myDocumentId else { return }
+                    // Snapshot scroll Y so the post-rebuild restore pins to the user's current
+                    // scroll position (not initialScrollPosition, and not an anchor-char position
+                    // that visibly shifts when math attachments arrive above the viewport).
+                    if let scrollView = self.scrollView {
+                        self.pendingDiagramScrollY = scrollView.contentView.bounds.origin.y
+                    }
+                    self.lastContent = nil
+                    self.elementCache.removeAll()
+                    // Force SwiftUI to re-evaluate the view body so updateNSView fires and
+                    // rebuilds with the now-cached image. Without this, the math/Mermaid
+                    // placeholder text stays on screen until the user scrolls/types/resizes
+                    // (regression introduced when adding the 100ms coalesce in Phase 5).
+                    // Keyed per-document (Plan 003) so this bump only invalidates this document's
+                    // own tick, not a shared counter every open pane's ObservableObject subscriber
+                    // would otherwise treat as "something changed, re-render everything".
+                    DocumentManager.shared.diagramRenderTicks[myDocumentId, default: 0] &+= 1
+                }
+            }
+        }
+
+        @objc func scrollViewDidScroll(_ notification: Notification) {
+            guard let clipView = notification.object as? NSClipView else { return }
+
+            // Debounce scroll position saving
+            scrollDebounceTimer?.invalidate()
+            scrollDebounceTimer = Timer.scheduledTimer(withTimeInterval: Timing.scrollPositionPersistDebounce, repeats: false) { [weak self, weak clipView] _ in
+                Task { @MainActor [weak self, weak clipView] in
+                    guard let clipView else { return }
+                    self?.onScrollPositionChanged?(clipView.bounds.origin.y)
+                }
+            }
+        }
+
+        deinit {
+            // No assumeIsolated (traps if the last release happens off-main); deinit has
+            // exclusive property access, and Timer.invalidate / removeObserver are
+            // nonisolated APIs.
+            scrollDebounceTimer?.invalidate()
+            diagramCoalesceTimer?.invalidate()
+            rebuildDebounceTimer?.invalidate()
+            interruptibleScrollTimer?.invalidate()
+            NotificationCenter.default.removeObserver(self)
+        }
+    }
+
+    // MARK: - Build Attributed String
+
+    private func buildAttributedString(coordinator: Coordinator) -> (NSAttributedString, [String: NSRange]) {
+        let parser = MarkdownParser.shared
+        let elements = parser.parse(content)
+        let headings = parser.extractHeadings(content)
+        let result = NSMutableAttributedString()
+        var headingRanges: [String: NSRange] = [:]
+        // P6: collect the ids actually present in this build so stale cache entries can be swept
+        // afterward. Keys are content-addressed, so without a sweep every edit leaves the previous
+        // version of the edited element behind, growing elementCache unboundedly for the session.
+        var liveKeys = Set<String>()
+
+        // Pair headings to slug IDs as we encounter them in the parsed element stream.
+        // Previously this used a positional index into `headings`, which drifted whenever
+        // `extractHeadings` returned an entry that `parse()` did not (e.g., a `#` line inside a
+        // fenced code block). Now `extractHeadings` skips fenced/frontmatter, so both sequences
+        // are aligned — but we also track slug-counts here to handle duplicates defensively.
+        var parsedHeadingIndex = 0
+
+        // Manage element cache — invalidate on zoom, font, width, or preview theme. Several
+        // renderers bake resolved RGB into cached fragments, so the selected palette belongs in
+        // the cache key even when the Markdown content itself did not change.
+        let zoomKey = "\(zoomLevel)-\(styleKey)"
+        let cacheValid = coordinator.lastZoomKey == zoomKey
+        if !cacheValid {
+            coordinator.elementCache.removeAll()
+            coordinator.lastZoomKey = zoomKey
+        }
+
+        for element in elements {
+            let startPos = result.length
+
+            // Elements whose appearance depends on an out-of-band async resource (remote images,
+            // Mermaid/LaTeX diagrams rendered by WebRenderer, HTML blocks converted via WebKit) must
+            // NOT be cached by content id: their first render inserts a "[Image: alt]" / "[Rendering…]"
+            // placeholder, and caching that placeholder freezes the wrong visual even after the
+            // diagramDidRender notification clears `elementCache`.
+            let skipCache: Bool
+            switch element {
+            case .image, .mermaidBlock, .displayMath, .htmlBlock:
+                skipCache = true
+            default:
+                skipCache = false
+            }
+            if !skipCache { liveKeys.insert(element.id) }
+
+            if !skipCache, cacheValid, let cached = coordinator.elementCache[element.id] {
+                result.append(cached)
+            } else {
+                renderElement(element, to: result)
+                let endPos = result.length
+                if !skipCache, endPos > startPos {
+                    let fragment = result.attributedSubstring(from: NSRange(location: startPos, length: endPos - startPos))
+                    coordinator.elementCache[element.id] = fragment
+                }
+            }
+
+            // Track heading ranges for outline navigation. extractHeadings now skips
+            // lines inside fenced code blocks, so the parsed-element heading order and the
+            // outline heading order align 1:1.
+            if element.isHeading, parsedHeadingIndex < headings.count {
+                headingRanges[headings[parsedHeadingIndex].id] = NSRange(location: startPos, length: result.length - startPos)
+                parsedHeadingIndex += 1
+            }
+        }
+
+        // P6: evict cache entries whose elements are no longer in the document (e.g. the previous
+        // content of an edited element), keeping the cache bounded to the current element stream.
+        if coordinator.elementCache.count > liveKeys.count {
+            coordinator.elementCache = coordinator.elementCache.filter { liveKeys.contains($0.key) }
+        }
+
+        // C6: search highlighting is applied after the rebuild via updateMatchHighlighting (which
+        // paints the ranges from findMatchRanges, honoring regex and case-sensitive mode), not here
+        // with a literal case-insensitive search that ignored those flags.
+
+        return (result, headingRanges)
+    }
+
+    /// Dispatch a parsed element to the appropriate append method
+    private func renderElement(_ element: MarkdownParser.Element, to result: NSMutableAttributedString) {
+        switch element {
+        case .heading1(let text): appendHeading(text: text, level: 1, to: result)
+        case .heading2(let text): appendHeading(text: text, level: 2, to: result)
+        case .heading3(let text): appendHeading(text: text, level: 3, to: result)
+        case .heading4(let text): appendHeading(text: text, level: 4, to: result)
+        case .heading5(let text): appendHeading(text: text, level: 5, to: result)
+        case .heading6(let text): appendHeading(text: text, level: 6, to: result)
+        case .paragraph(let text): appendParagraph(text: text, to: result)
+        case .frontmatter(let lines): appendFrontmatter(lines: lines, to: result)
+        case .list(let items): appendList(items: items, to: result)
+        case .codeBlock(let code, let language): appendCodeBlock(code: code, language: language, to: result)
+        case .mermaidBlock(let code): appendMermaidBlock(code: code, to: result)
+        case .displayMath(let latex): appendDisplayMath(latex: latex, to: result)
+        case .table(let rows): appendTable(rows: rows, to: result)
+        case .image(let alt, let path): appendImage(alt: alt, path: path, to: result)
+        case .horizontalRule: appendHorizontalRule(to: result)
+        case .blockquote(let text): appendBlockquote(text: text, to: result)
+        case .alert(let kind, let text): appendAlert(kind: kind, text: text, to: result)
+        case .htmlBlock(let html): appendHTMLBlock(html: html, to: result)
+        }
+    }
+
+    // MARK: - Append Methods
+
+    private func appendHeading(text: String, level: Int, to result: NSMutableAttributedString) {
+        let sizes: [Int: CGFloat] = [1: 28, 2: 24, 3: 20, 4: 18, 5: 16, 6: 15]
+        let size = (sizes[level] ?? 16) * zoomLevel
+        let font = mainFont(size: size).withWeight(.semibold)
+
+        // Heading color hierarchy
+        let headingColors: [Int: NSColor] = [
+            1: theme.blueColor,
+            2: theme.blueColor.withAlphaComponent(0.85),
+            3: theme.strongTextColor,
+            4: theme.secondaryTextColor,
+            5: theme.secondaryTextColor,
+            6: theme.secondaryTextColor
+        ]
+        let color = headingColors[level] ?? theme.textColor
+
+        let paragraphStyle = NSMutableParagraphStyle()
+        paragraphStyle.paragraphSpacingBefore = level == 1 ? 24 : (level == 2 ? 20 : 16)
+        paragraphStyle.paragraphSpacing = (level <= 2) ? 4 : 8
+
+        let attributes: [NSAttributedString.Key: Any] = [
+            .font: font,
+            .foregroundColor: color,
+            .paragraphStyle: paragraphStyle
+        ]
+
+        let formatted = formatInlineMarkdown(text, attributes: attributes)
+        result.append(formatted)
+        result.append(NSAttributedString(string: "\n"))
+
+        // H1 and H2 get a subtle underline divider
+        if level <= 2 {
+            let dividerStyle = NSMutableParagraphStyle()
+            dividerStyle.paragraphSpacing = 10
+            let dividerLength = level == 1 ? 50 : 35
+            let dividerColor = theme.blueColor.withAlphaComponent(level == 1 ? 0.4 : 0.25)
+            result.append(NSAttributedString(string: String(repeating: "─", count: dividerLength) + "\n", attributes: [
+                .font: NSFont.systemFont(ofSize: 6),
+                .foregroundColor: dividerColor,
+                .paragraphStyle: dividerStyle
+            ]))
+        }
+    }
+
+    private func appendParagraph(text: String, to result: NSMutableAttributedString) {
+        let font = mainFont(size: 16 * zoomLevel)
+        let paragraphStyle = NSMutableParagraphStyle()
+        paragraphStyle.paragraphSpacing = 10
+        paragraphStyle.lineSpacing = 4
+
+        let attributes: [NSAttributedString.Key: Any] = [
+            .font: font,
+            .foregroundColor: theme.textColor,
+            .paragraphStyle: paragraphStyle
+        ]
+
+        let formatted = formatInlineMarkdown(text, attributes: attributes)
+        result.append(formatted)
+        result.append(NSAttributedString(string: "\n"))
+    }
+
+    private func appendList(items: [(level: Int, text: String, isOrdered: Bool, startNumber: Int?)], to result: NSMutableAttributedString) {
+        let font = mainFont(size: 16 * zoomLevel)
+
+        // Track ordered list counters per nesting level. The list's first item carries an
+        // optional startNumber from the source markdown; subsequent items at the same level
+        // continue sequentially. A list opening with `4. foo` renders as `4.`, not `1.`.
+        var orderedCounters: [Int: Int] = [:]
+
+        for (level, text, isOrdered, startNumber) in items {
+            // Calculate indentation based on nesting level
+            let baseIndent: CGFloat = 16
+            let levelIndent: CGFloat = CGFloat(level) * 20
+
+            let paragraphStyle = NSMutableParagraphStyle()
+            paragraphStyle.headIndent = baseIndent + levelIndent + 24
+            paragraphStyle.firstLineHeadIndent = baseIndent + levelIndent
+            paragraphStyle.paragraphSpacing = 3
+            paragraphStyle.lineSpacing = 3
+
+            let attributes: [NSAttributedString.Key: Any] = [
+                .font: font,
+                .foregroundColor: theme.textColor,
+                .paragraphStyle: paragraphStyle
+            ]
+
+            var bulletPrefix: String
+            var itemText = text
+
+            // Task list items (read-only: the viewer never changes the file).
+            if let isChecked = MarkdownParser.taskState(ofItemText: text) {
+                bulletPrefix = isChecked ? "☑  " : "☐  "
+                itemText = String(text.dropFirst(4))
+                orderedCounters[level] = nil
+            } else if isOrdered {
+                let counter: Int
+                if let existing = orderedCounters[level] {
+                    counter = existing + 1
+                } else if let start = startNumber {
+                    // First item at this level — honor the explicit start number from source.
+                    counter = start
+                } else {
+                    counter = 1
+                }
+                orderedCounters[level] = counter
+                bulletPrefix = "\(counter).  "
+            } else {
+                // Determine bullet style based on nesting level
+                let bullets = ["•", "◦", "▪", "▹"]
+                let bullet = bullets[min(level, bullets.count - 1)]
+                bulletPrefix = "\(bullet)  "
+                orderedCounters[level] = nil
+            }
+
+            let bulletColor = theme.blueColor.withAlphaComponent(0.8)
+            let bulletAttr = NSMutableAttributedString(string: bulletPrefix, attributes: [
+                .font: font,
+                .foregroundColor: bulletColor,
+                .paragraphStyle: paragraphStyle
+            ])
+            result.append(bulletAttr)
+
+            let formatted = formatInlineMarkdown(itemText, attributes: attributes)
+            result.append(formatted)
+            result.append(NSAttributedString(string: "\n"))
+        }
+    }
+
+    private func appendFrontmatter(lines: [String], to result: NSMutableAttributedString) {
+        guard !lines.isEmpty else { return }
+
+        let titleFont = mainFont(size: 11 * zoomLevel).withWeight(.semibold)
+        let keyFont = mainFont(size: 12 * zoomLevel).withWeight(.medium)
+        let valueFont = mainFont(size: 12 * zoomLevel)
+
+        let paragraphStyle = NSMutableParagraphStyle()
+        paragraphStyle.paragraphSpacing = 2
+        paragraphStyle.lineSpacing = 2
+
+        // Header
+        result.append(NSAttributedString(string: "DOCUMENT INFO\n", attributes: [
+            .font: titleFont,
+            .foregroundColor: theme.secondaryTextColor,
+            .paragraphStyle: paragraphStyle
+        ]))
+
+        // Parse and display key-value pairs
+        for line in lines {
+            let trimmed = line.trimmingCharacters(in: .whitespaces)
+            guard !trimmed.isEmpty else { continue }
+
+            if let colonIndex = trimmed.firstIndex(of: ":") {
+                let key = String(trimmed[..<colonIndex]).trimmingCharacters(in: .whitespaces)
+                let value = String(trimmed[trimmed.index(after: colonIndex)...]).trimmingCharacters(in: .whitespaces)
+
+                result.append(NSAttributedString(string: "\(key): ", attributes: [
+                    .font: keyFont,
+                    .foregroundColor: theme.secondaryTextColor,
+                    .paragraphStyle: paragraphStyle
+                ]))
+                result.append(NSAttributedString(string: "\(value)\n", attributes: [
+                    .font: valueFont,
+                    .foregroundColor: theme.textColor,
+                    .paragraphStyle: paragraphStyle
+                ]))
+            } else {
+                // Line without colon, just display it
+                result.append(NSAttributedString(string: "\(trimmed)\n", attributes: [
+                    .font: valueFont,
+                    .foregroundColor: theme.textColor,
+                    .paragraphStyle: paragraphStyle
+                ]))
+            }
+        }
+
+        // Add separator line after frontmatter
+        let separatorStyle = NSMutableParagraphStyle()
+        separatorStyle.paragraphSpacingBefore = 8
+        separatorStyle.paragraphSpacing = 16
+
+        result.append(NSAttributedString(string: String(repeating: "─", count: 40) + "\n", attributes: [
+            .font: NSFont.systemFont(ofSize: 10),
+            .foregroundColor: theme.selectionColor,
+            .paragraphStyle: separatorStyle
+        ]))
+    }
+
+    private func appendCodeBlock(code: String, language: String? = nil, to result: NSMutableAttributedString) {
+        // Warp-style code block: dark background, rounded corners feel, language label
+        let blockStart = result.length
+
+        let codeBackground = theme.raisedBackgroundColor
+
+        // Top border with padding
+        let topBorder = "  ╭" + String(repeating: "─", count: 76) + "╮\n"
+        result.append(NSAttributedString(string: topBorder, attributes: [
+            .font: fixedFont(size: 11 * zoomLevel),
+            .foregroundColor: theme.commentColor
+        ]))
+
+        // Add background and left border to each line (with per-line syntax highlighting)
+        let codeLines = code.components(separatedBy: .newlines)
+        let result2 = NSMutableAttributedString()
+
+        for line in codeLines {
+            // Add left border
+            result2.append(NSAttributedString(string: "  │ ", attributes: [
+                .font: fixedFont(size: 11 * zoomLevel),
+                .foregroundColor: theme.commentColor
+            ]))
+
+            // Add highlighted code line
+            let highlightedLine = SyntaxHighlighter.shared.highlight(
+                code: line,
+                language: language,
+                font: fixedFont(size: 13 * zoomLevel),
+                theme: theme
+            )
+            let mutableLine = NSMutableAttributedString(attributedString: highlightedLine)
+
+            // Add background to the line
+            let lineRange = NSRange(location: 0, length: mutableLine.length)
+            mutableLine.addAttribute(.backgroundColor, value: codeBackground, range: lineRange)
+
+            result2.append(mutableLine)
+            result2.append(NSAttributedString(string: "\n", attributes: [
+                .backgroundColor: codeBackground
+            ]))
+        }
+
+        result.append(result2)
+
+        // Bottom border with language label
+        let langLabel = language?.lowercased() ?? "text"
+        // C2: clamp at 0 — a long language label would make this count negative, and
+        // String(repeating:count:) with a negative count is a precondition failure (crash on render).
+        let labelPadding = max(0, 76 - langLabel.count - 1)
+        let bottomBorder = "  ╰" + String(repeating: "─", count: labelPadding) + " " + langLabel + "╯\n"
+        result.append(NSAttributedString(string: bottomBorder, attributes: [
+            .font: fixedFont(size: 11 * zoomLevel),
+            .foregroundColor: theme.commentColor
+        ]))
+
+        // Tag the whole block (borders included) with its RAW source so PreviewTextView can
+        // offer a copy button. Selecting a rendered block by hand copies the box-drawing
+        // borders and the "│ " line prefixes along with the code — the payload is the only
+        // clean copy. A fresh object per block keeps adjacent blocks from merging into one
+        // effective range (attribute runs coalesce on value equality; NSObject = identity).
+        result.addAttribute(
+            PreviewTextView.codeBlockKey,
+            value: CodeBlockPayload(code: code),
+            range: NSRange(location: blockStart, length: result.length - blockStart)
+        )
+
+        // Add spacing after code block
+        result.append(NSAttributedString(string: "\n"))
+    }
+
+    private func appendBlockquote(text: String, to result: NSMutableAttributedString) {
+        let font = mainFont(size: 16 * zoomLevel).withTraits(.italic)
+        let paragraphStyle = NSMutableParagraphStyle()
+        paragraphStyle.headIndent = 24
+        paragraphStyle.firstLineHeadIndent = 24
+        paragraphStyle.paragraphSpacingBefore = 8
+        paragraphStyle.paragraphSpacing = 8
+
+        // Accent-colored bar character
+        let barAttr = NSAttributedString(string: "  ┃ ", attributes: [
+            .font: NSFont.systemFont(ofSize: 16 * zoomLevel),
+            .foregroundColor: theme.cyanColor.withAlphaComponent(0.75),
+            .paragraphStyle: paragraphStyle
+        ])
+        result.append(barAttr)
+
+        let attributes: [NSAttributedString.Key: Any] = [
+            .font: font,
+            .foregroundColor: theme.secondaryTextColor,
+            .paragraphStyle: paragraphStyle
+        ]
+
+        result.append(formatInlineMarkdown(text, attributes: attributes))
+        result.append(NSAttributedString(string: "\n", attributes: attributes))
+    }
+
+    /// GitHub-style alert: colored bar, icon + bold kind title, then the body in regular (not
+    /// italic) text — an alert is a callout, not a quotation. Adaptive system colors, so it
+    /// reads correctly in both appearances without baking RGB into the cached fragment.
+    private func appendAlert(kind: MarkdownParser.AlertKind, text: String, to result: NSMutableAttributedString) {
+        let color: NSColor
+        switch kind {
+        case .note: color = theme.blueColor
+        case .tip: color = theme.greenColor
+        case .important: color = theme.purpleColor
+        case .warning: color = theme.orangeColor
+        case .caution: color = theme.redColor
+        }
+
+        let paragraphStyle = NSMutableParagraphStyle()
+        paragraphStyle.headIndent = 24
+        paragraphStyle.firstLineHeadIndent = 24
+        paragraphStyle.paragraphSpacingBefore = 2
+        paragraphStyle.paragraphSpacing = 2
+        paragraphStyle.lineSpacing = 3
+
+        let titleStyle = paragraphStyle.mutableCopy() as! NSMutableParagraphStyle
+        titleStyle.paragraphSpacingBefore = 10
+
+        let lastStyle = paragraphStyle.mutableCopy() as! NSMutableParagraphStyle
+        lastStyle.paragraphSpacing = 10
+
+        func bar(_ style: NSParagraphStyle) -> NSAttributedString {
+            NSAttributedString(string: "  ┃ ", attributes: [
+                .font: NSFont.systemFont(ofSize: 16 * zoomLevel),
+                .foregroundColor: color,
+                .paragraphStyle: style
+            ])
+        }
+
+        // Title row: bar, tinted SF Symbol, bold kind name.
+        let titleFont = mainFont(size: 15 * zoomLevel).withWeight(.semibold)
+        result.append(bar(titleStyle))
+        let symbolConfig = NSImage.SymbolConfiguration(pointSize: 14 * zoomLevel, weight: .medium)
+            .applying(NSImage.SymbolConfiguration(paletteColors: [color]))
+        if let symbol = NSImage(systemSymbolName: kind.symbolName, accessibilityDescription: kind.title)?
+            .withSymbolConfiguration(symbolConfig) {
+            let attachment = NSTextAttachment()
+            attachment.image = symbol
+            // Drop the glyph slightly so it sits on the text baseline rather than floating.
+            attachment.bounds = NSRect(x: 0, y: -2.5 * zoomLevel, width: symbol.size.width, height: symbol.size.height)
+            let icon = NSMutableAttributedString(attachment: attachment)
+            icon.addAttribute(.paragraphStyle, value: titleStyle, range: NSRange(location: 0, length: icon.length))
+            result.append(icon)
+            result.append(NSAttributedString(string: " ", attributes: [.font: titleFont, .paragraphStyle: titleStyle]))
+        }
+        result.append(NSAttributedString(string: kind.title + "\n", attributes: [
+            .font: titleFont,
+            .foregroundColor: color,
+            .paragraphStyle: titleStyle
+        ]))
+
+        let paragraphs = MarkdownParser.alertParagraphs(text)
+        for (index, paragraph) in paragraphs.enumerated() {
+            let style = index == paragraphs.count - 1 ? lastStyle : paragraphStyle
+            let attributes: [NSAttributedString.Key: Any] = [
+                .font: mainFont(size: 16 * zoomLevel),
+                .foregroundColor: theme.textColor,
+                .paragraphStyle: style
+            ]
+            result.append(bar(style))
+            result.append(formatInlineMarkdown(paragraph, attributes: attributes))
+            result.append(NSAttributedString(string: "\n", attributes: attributes))
+        }
+    }
+
+    private func appendTable(rows: [[String]], to result: NSMutableAttributedString) {
+        guard !rows.isEmpty else { return }
+
+        let font = mainFont(size: 13 * zoomLevel)
+        let boldFont = font.withWeight(.semibold)
+        let columnCount = rows.map { $0.count }.max() ?? 1
+
+        let table = NSTextTable()
+        table.numberOfColumns = columnCount
+        table.setContentWidth(100, type: .percentageValueType)
+        table.layoutAlgorithm = .fixedLayoutAlgorithm
+        table.hidesEmptyCells = false
+        let columnWidths = MarkdownTableColumnLayout.widthPercentages(for: rows, configuration: tableColumnConfiguration)
+
+        let borderColor = theme.selectionColor
+
+        for (rowIndex, row) in rows.enumerated() {
+            let isHeader = rowIndex == 0
+
+            // "Populated first cell, empty trailing cells" → render as a single full-width
+            // cell. Convention used in many docs to create summary/footer rows that visually
+            // span the table; CommonMark has no syntax for it, so we infer the intent.
+            let trimmed = row.map { $0.trimmingCharacters(in: .whitespaces) }
+            let isFullSpan = row.count > 1 && !trimmed[0].isEmpty
+                && trimmed.dropFirst().allSatisfy({ $0.isEmpty })
+
+            if isFullSpan {
+                let block = NSTextTableBlock(table: table, startingRow: rowIndex, rowSpan: 1, startingColumn: 0, columnSpan: columnCount)
+                block.setBorderColor(borderColor)
+                block.setWidth(0.5, type: .absoluteValueType, for: .border)
+                block.setWidth(6, type: .absoluteValueType, for: .padding)
+                if rowIndex % 2 == 0 {
+                    block.backgroundColor = theme.raisedBackgroundColor
+                }
+
+                let cellStyle = NSMutableParagraphStyle()
+                cellStyle.textBlocks = [block]
+                cellStyle.lineSpacing = 2
+                cellStyle.paragraphSpacingBefore = 2
+                cellStyle.paragraphSpacing = 2
+
+                let attrs: [NSAttributedString.Key: Any] = [
+                    .font: font,
+                    .foregroundColor: theme.textColor,
+                    .paragraphStyle: cellStyle
+                ]
+
+                let formattedCell = formatInlineMarkdown(row[0], attributes: attrs)
+                result.append(formattedCell)
+                result.append(NSAttributedString(string: "\n", attributes: attrs))
+                continue
+            }
+
+            for colIndex in 0..<columnCount {
+                let cellText = colIndex < row.count ? row[colIndex] : ""
+
+                let block = NSTextTableBlock(table: table, startingRow: rowIndex, rowSpan: 1, startingColumn: colIndex, columnSpan: 1)
+                block.setContentWidth(columnWidths[colIndex], type: .percentageValueType)
+
+                block.setBorderColor(borderColor)
+                block.setWidth(0.5, type: .absoluteValueType, for: .border)
+                block.setWidth(6, type: .absoluteValueType, for: .padding)
+
+                if isHeader {
+                    block.backgroundColor = theme.selectionColor.withAlphaComponent(0.65)
+                } else if rowIndex % 2 == 0 {
+                    block.backgroundColor = theme.raisedBackgroundColor
+                }
+
+                let cellStyle = NSMutableParagraphStyle()
+                cellStyle.textBlocks = [block]
+                cellStyle.lineSpacing = 2
+                cellStyle.paragraphSpacingBefore = 2
+                cellStyle.paragraphSpacing = 2
+
+                let attrs: [NSAttributedString.Key: Any] = [
+                    .font: isHeader ? boldFont : font,
+                    .foregroundColor: theme.textColor,
+                    .paragraphStyle: cellStyle
+                ]
+
+                let formattedCell = formatInlineMarkdown(cellText, attributes: attrs)
+                result.append(formattedCell)
+                result.append(NSAttributedString(string: "\n", attributes: attrs))
+            }
+        }
+
+        // Spacing after table
+        result.append(NSAttributedString(string: "\n"))
+    }
+
+    private func appendHorizontalRule(to result: NSMutableAttributedString) {
+        let paragraphStyle = NSMutableParagraphStyle()
+        paragraphStyle.paragraphSpacingBefore = 16
+        paragraphStyle.paragraphSpacing = 16
+
+        // Gradient-like rule: accent fading to transparent
+        let accentColor = theme.blueColor
+        let segments = 40
+        let ruleStr = NSMutableAttributedString()
+        for i in 0..<segments {
+            let progress = CGFloat(i) / CGFloat(segments)
+            // Bell curve: strong in center, fading at edges
+            let intensity = sin(progress * .pi)
+            let color = accentColor.withAlphaComponent(intensity * 0.5)
+            ruleStr.append(NSAttributedString(string: "─", attributes: [
+                .font: NSFont.systemFont(ofSize: 10),
+                .foregroundColor: color,
+                .paragraphStyle: paragraphStyle
+            ]))
+        }
+        ruleStr.append(NSAttributedString(string: "\n"))
+        result.append(ruleStr)
+    }
+
+    private func appendImage(alt: String, path: String, to result: NSMutableAttributedString) {
+        if let image = loadImage(path: path) {
+            let attachment = NSTextAttachment()
+            let scale = contentWidth.attachmentMaxWidth.map {
+                min(1.0, $0 / image.size.width)
+            } ?? 1.0
+            let newSize = NSSize(width: image.size.width * scale, height: image.size.height * scale)
+
+            let displayImage = (image.copy() as? NSImage) ?? image
+            displayImage.size = newSize
+            attachment.image = displayImage
+
+            let imageString = NSAttributedString(attachment: attachment)
+            result.append(NSAttributedString(string: "\n"))
+            result.append(imageString)
+            result.append(NSAttributedString(string: "\n\n"))
+        } else {
+            // Show placeholder for missing image
+            let attributes: [NSAttributedString.Key: Any] = [
+                .font: mainFont(size: 14 * zoomLevel),
+                .foregroundColor: theme.secondaryTextColor
+            ]
+            result.append(NSAttributedString(string: "[Image: \(alt.isEmpty ? path : alt)]\n", attributes: attributes))
+        }
+    }
+
+    private func loadImage(path: String) -> NSImage? {
+        // L3: cache key composed of (baseURL.path, path) so two open documents in different
+        // folders can each have an `image.png` without one's image overwriting the other's
+        // entry. Remote URLs are unique by URL alone, so we leave them keyed on `path`.
+        let cacheKey: String = {
+            if path.hasPrefix("http://") || path.hasPrefix("https://") { return path }
+            return (baseURL?.deletingLastPathComponent().path ?? "") + "\u{1F}" + path
+        }()
+        if let cached = Coordinator.imageCache.object(forKey: cacheKey as NSString) {
+            return cached
+        }
+
+        // Remote URL — return nil (placeholder) and load asynchronously.
+        // Posts .diagramRendered when the image lands so the preview rebuilds and the placeholder
+        // text gets replaced with the actual image. (Piggybacks on the existing diagram refresh hook.)
+        if path.hasPrefix("http://") || path.hasPrefix("https://") {
+            guard !Coordinator.remoteImageFailures.contains(cacheKey),
+                  !Coordinator.remoteImageInFlight.contains(cacheKey),
+                  let url = URL(string: path) else {
+                return nil
+            }
+
+            Coordinator.remoteImageInFlight.insert(cacheKey)
+            // Captured locally (not via implicit `self`) so the notification carries the
+            // document this image load belongs to — a different pane's coordinator ignores it
+            // (Plan 003).
+            let docId = documentId
+            // URLSession instead of the old synchronous NSImage(contentsOf:) on a global queue —
+            // that path had no timeout, so a hung server pinned a dispatch thread indefinitely.
+            Task {
+                let image: NSImage?
+                if let (data, _) = try? await URLSession.shared.data(from: url) {
+                    image = NSImage(data: data)
+                } else {
+                    image = nil
+                }
+                await MainActor.run {
+                    Coordinator.remoteImageInFlight.remove(cacheKey)
+                    guard let image = image else {
+                        Coordinator.remoteImageFailures.insert(cacheKey)
+                        return
+                    }
+
+                    Coordinator.remoteImageFailures.remove(cacheKey)
+                    Coordinator.imageCache.setObject(image, forKey: cacheKey as NSString)
+                    NotificationCenter.default.post(name: .diagramRendered, object: docId)
+                }
+            }
+            return nil
+        }
+
+        // Activate directory security scope for relative image access
+        var accessingDirectory = false
+        var dirURL: URL?
+        if let bookmark = directoryBookmark {
+            var isStale = false
+            if let resolved = try? URL(resolvingBookmarkData: bookmark, options: .withSecurityScope, relativeTo: nil, bookmarkDataIsStale: &isStale) {
+                dirURL = resolved
+                accessingDirectory = resolved.startAccessingSecurityScopedResource()
+            }
+        }
+        defer {
+            if accessingDirectory, let dir = dirURL {
+                dir.stopAccessingSecurityScopedResource()
+            }
+        }
+
+        // Local file — synchronous is fine for local disk I/O
+        let resolvedURL: URL?
+
+        let absoluteURL = URL(fileURLWithPath: path)
+        if FileManager.default.fileExists(atPath: absoluteURL.path) {
+            resolvedURL = absoluteURL
+        } else if let base = baseURL?.deletingLastPathComponent() {
+            let relativeURL = base.appendingPathComponent(path)
+            resolvedURL = FileManager.default.fileExists(atPath: relativeURL.path) ? relativeURL : nil
+        } else {
+            resolvedURL = nil
+        }
+
+        if let url = resolvedURL, let image = NSImage(contentsOf: url) {
+            Coordinator.imageCache.setObject(image, forKey: cacheKey as NSString)
+            return image
+        }
+
+        return nil
+    }
+
+    // MARK: - Mermaid & Math
+
+    private func appendMermaidBlock(code: String, to result: NSMutableAttributedString) {
+        let cacheKey = "mermaid-\(theme.id)-" + code
+        if let cached = Coordinator.diagramCache.object(forKey: cacheKey as NSString) {
+            // Embed cached image
+            let attachment = NSTextAttachment()
+            let scale = contentWidth.attachmentMaxWidth.map {
+                min(1.0, $0 / cached.size.width)
+            } ?? 1.0
+            let newSize = NSSize(width: cached.size.width * scale, height: cached.size.height * scale)
+            let resized = NSImage(size: newSize)
+            resized.lockFocus()
+            cached.draw(in: NSRect(origin: .zero, size: newSize))
+            resized.unlockFocus()
+            attachment.image = resized
+            result.append(NSAttributedString(string: "\n"))
+            result.append(NSAttributedString(attachment: attachment))
+            result.append(NSAttributedString(string: "\n\n"))
+        } else {
+            // Show styled loading placeholder
+            let placeholderStyle = NSMutableParagraphStyle()
+            placeholderStyle.alignment = .center
+            placeholderStyle.paragraphSpacingBefore = 12
+            placeholderStyle.paragraphSpacing = 12
+
+            let placeholder = NSMutableAttributedString()
+            placeholder.append(NSAttributedString(string: "\n", attributes: [:]))
+            placeholder.append(NSAttributedString(string: "    Rendering diagram...\n", attributes: [
+                .font: NSFont.systemFont(ofSize: 13 * zoomLevel, weight: .medium),
+                .foregroundColor: theme.secondaryTextColor,
+                .paragraphStyle: placeholderStyle
+            ]))
+            placeholder.append(NSAttributedString(string: "\n", attributes: [:]))
+            result.append(placeholder)
+
+            // Captured locally so the notification carries the document this diagram belongs
+            // to — a different pane's coordinator ignores it (Plan 003).
+            let docId = documentId
+            Task { @MainActor in
+                WebRenderer.shared.renderMermaid(code, theme: theme) { image in
+                    guard let image = image else { return }
+                    Coordinator.diagramCache.setObject(image, forKey: cacheKey as NSString)
+                    NotificationCenter.default.post(name: .diagramRendered, object: docId)
+                }
+            }
+        }
+    }
+
+    private func appendDisplayMath(latex: String, to result: NSMutableAttributedString) {
+        let cacheKey = "math-display-\(theme.id)-" + latex
+        if let cached = Coordinator.diagramCache.object(forKey: cacheKey as NSString) {
+            let attachment = NSTextAttachment()
+            attachment.image = cached
+            result.append(NSAttributedString(string: "\n"))
+            result.append(NSAttributedString(attachment: attachment))
+            result.append(NSAttributedString(string: "\n\n"))
+        } else {
+            // Show styled loading placeholder
+            let paragraphStyle = NSMutableParagraphStyle()
+            paragraphStyle.alignment = .center
+            paragraphStyle.paragraphSpacing = 8
+            result.append(NSAttributedString(string: "  Rendering math...\n", attributes: [
+                .font: NSFont.systemFont(ofSize: 13 * zoomLevel, weight: .medium),
+                .foregroundColor: theme.secondaryTextColor,
+                .paragraphStyle: paragraphStyle
+            ]))
+
+            // Captured locally so the notification carries the document this math block
+            // belongs to — a different pane's coordinator ignores it (Plan 003).
+            let docId = documentId
+            Task { @MainActor in
+                WebRenderer.shared.renderMath(latex, displayMode: true, foregroundHex: theme.textHex) { image in
+                    guard let image = image else { return }
+                    Coordinator.diagramCache.setObject(image, forKey: cacheKey as NSString)
+                    NotificationCenter.default.post(name: .diagramRendered, object: docId)
+                }
+            }
+        }
+    }
+
+    // MARK: - HTML Block Support
+
+    private func appendHTMLBlock(html: String, to result: NSMutableAttributedString) {
+        let textColor = theme.textHex
+        let bgColor = theme.backgroundHex
+        let linkColor = theme.palette.base0D
+        let mainCSSFamily = PreviewFontCatalog.cssFamily(id: mainFontID, monospaced: false)
+        let fixedCSSFamily = PreviewFontCatalog.cssFamily(id: fixedFontID, monospaced: true)
+        let fontSize = 16 * zoomLevel
+
+        // Resolve relative image src paths to absolute file paths
+        let baseDir = baseURL?.deletingLastPathComponent()
+        var resolvedHTML = html
+        if let baseDir = baseDir {
+            let imgPattern = #"(<img\s[^>]*src\s*=\s*")([^"]+)("[^>]*>)"#
+            if let regex = try? NSRegularExpression(pattern: imgPattern, options: .caseInsensitive) {
+                let nsHTML = resolvedHTML as NSString
+                let matches = regex.matches(in: resolvedHTML, range: NSRange(location: 0, length: nsHTML.length)).reversed()
+                for match in matches {
+                    guard match.numberOfRanges >= 4 else { continue }
+                    let srcRange = match.range(at: 2)
+                    let src = nsHTML.substring(with: srcRange)
+                    // Skip URLs that are already absolute
+                    if src.hasPrefix("http://") || src.hasPrefix("https://") || src.hasPrefix("file://") { continue }
+                    let resolved = baseDir.appendingPathComponent(src)
+                    if FileManager.default.fileExists(atPath: resolved.path) {
+                        resolvedHTML = (resolvedHTML as NSString).replacingCharacters(in: srcRange, with: resolved.absoluteString)
+                    }
+                }
+            }
+        }
+
+        // Wrap HTML with styling that matches the app theme
+        let styledHTML = """
+        <html><head><meta charset="utf-8"><style>
+        body { font-family: \(mainCSSFamily);
+               font-size: \(fontSize)px; color: \(textColor); background: \(bgColor);
+               line-height: 1.5; margin: 0; padding: 0; }
+        a { color: \(linkColor); }
+        code, pre, kbd, samp { font-family: \(fixedCSSFamily); }
+        img { max-width: 100%; height: auto; }
+        h1, h2, h3, h4, h5, h6 { margin-top: 0.5em; margin-bottom: 0.3em; }
+        p { margin: 0.3em 0; }
+        </style></head><body>\(resolvedHTML)</body></html>
+        """
+
+        // Explicit .characterEncoding is required. The `NSAttributedString(html:baseURL:…)`
+        // convenience initializer takes no encoding, so AppKit's HTML importer GUESSES and
+        // falls back to Windows-1252 — turning UTF-8 "—" into "â€"", "·" into "Â·", and "×"
+        // into "Ã—" throughout any block containing non-ASCII text. ExportManager already
+        // passes this option; the preview path did not. (The <meta charset> above is a second
+        // belt on the same trousers.)
+        guard let data = styledHTML.data(using: .utf8),
+              let attributed = try? NSAttributedString(
+                data: data,
+                options: [
+                    .documentType: NSAttributedString.DocumentType.html,
+                    .characterEncoding: String.Encoding.utf8.rawValue,
+                    .baseURL: baseDir ?? URL(fileURLWithPath: "/")
+                ],
+                documentAttributes: nil
+              ) else {
+            // Fallback: render as plain text
+            let font = mainFont(size: fontSize)
+            result.append(NSAttributedString(string: html + "\n", attributes: [
+                .font: font,
+                .foregroundColor: theme.textColor
+            ]))
+            return
+        }
+
+        result.append(attributed)
+        // Ensure trailing newline
+        if !attributed.string.hasSuffix("\n") {
+            result.append(NSAttributedString(string: "\n"))
+        }
+    }
+
+    // MARK: - Inline Formatting
+
+    /// Sentinel attribute marking ranges that came from an inline code span. Subsequent inline
+    /// passes (bold, italic, strike, link) skip ranges carrying this attribute so that
+    /// `` `*foo*` `` renders with literal asterisks instead of treating them as italic markers.
+    /// Cleared at the end of formatInlineMarkdown so it never leaks to the storage.
+    private static let codeSpanSentinel = NSAttributedString.Key("zMD.codeSpanSentinel")
+
+    private func formatInlineMarkdown(_ text: String, attributes: [NSAttributedString.Key: Any], stripCodeSpanSentinel: Bool = true) -> NSAttributedString {
+        let result = NSMutableAttributedString()
+        let baseFont = attributes[.font] as? NSFont ?? NSFont.systemFont(ofSize: 16)
+
+        for token in InlineMarkdown.tokenize(text) {
+            var tokenAttributes = attributes
+            switch token {
+            case .text(let text):
+                result.append(NSAttributedString(string: text, attributes: tokenAttributes))
+            case .lineBreak:
+                result.append(NSAttributedString(string: "\n", attributes: tokenAttributes))
+            case .code(let text):
+                tokenAttributes[Self.codeSpanSentinel] = true
+                tokenAttributes[.font] = fixedFont(size: baseFont.pointSize - 1)
+                tokenAttributes[.foregroundColor] = theme.greenColor
+                tokenAttributes[.backgroundColor] = theme.raisedBackgroundColor
+                result.append(NSAttributedString(string: text, attributes: tokenAttributes))
+            case .math(let text):
+                result.append(NSAttributedString(string: "$\(text)$", attributes: tokenAttributes))
+            case .strong(let text):
+                tokenAttributes[.font] = baseFont.withWeight(.bold)
+                result.append(formatInlineMarkdown(text, attributes: tokenAttributes, stripCodeSpanSentinel: false))
+            case .emphasis(let text):
+                tokenAttributes[.font] = baseFont.withTraits(.italic)
+                result.append(formatInlineMarkdown(text, attributes: tokenAttributes, stripCodeSpanSentinel: false))
+            case .strikethrough(let text):
+                tokenAttributes[.strikethroughStyle] = NSUnderlineStyle.single.rawValue
+                result.append(formatInlineMarkdown(text, attributes: tokenAttributes, stripCodeSpanSentinel: false))
+            case .highlight(let text):
+                tokenAttributes[.backgroundColor] = theme.yellowColor.withAlphaComponent(0.35)
+                result.append(formatInlineMarkdown(text, attributes: tokenAttributes, stripCodeSpanSentinel: false))
+            case .image(let alt, let source):
+                if let image = loadImage(path: source) {
+                    let attachment = NSTextAttachment()
+                    let maxHeight = baseFont.pointSize * 2.2
+                    let scale = image.size.height > 0 ? min(1.0, maxHeight / image.size.height) : 1.0
+                    let displaySize = NSSize(width: image.size.width * scale, height: image.size.height * scale)
+                    let displayImage = (image.copy() as? NSImage) ?? image
+                    displayImage.size = displaySize
+                    attachment.image = displayImage
+                    attachment.bounds = CGRect(x: 0, y: -4, width: displaySize.width, height: displaySize.height)
+                    let replacement = NSMutableAttributedString(attachment: attachment)
+                    replacement.addAttributes(tokenAttributes, range: NSRange(location: 0, length: replacement.length))
+                    result.append(replacement)
+                } else {
+                    let label = "[Image: \(alt.isEmpty ? source : alt)]"
+                    result.append(NSAttributedString(string: label, attributes: tokenAttributes))
+                }
+            case .link(let label, let destination):
+                tokenAttributes[.link] = URL(string: destination)
+                tokenAttributes[.foregroundColor] = theme.blueColor
+                tokenAttributes[.underlineStyle] = NSUnderlineStyle.single.rawValue
+                result.append(formatInlineMarkdown(label, attributes: tokenAttributes, stripCodeSpanSentinel: false))
+            }
+        }
+
+        // Inline math $...$ — moved up to run BEFORE bold/italic/strike (M3) so a math span like
+        // `$a^{**}$` doesn't get its `**` consumed by the bold pass.
+        applyInlineMathPattern(to: result)
+
+        // Strip the sentinel before returning so it doesn't ride along into NSTextStorage.
+        if stripCodeSpanSentinel {
+            let fullRange = NSRange(location: 0, length: result.length)
+            result.removeAttribute(Self.codeSpanSentinel, range: fullRange)
+        }
+
+        return result
+    }
+
+    private static var regexCache: [String: NSRegularExpression] = [:]
+
+    private static func cachedRegex(_ pattern: String) -> NSRegularExpression? {
+        if let cached = regexCache[pattern] { return cached }
+        guard let regex = try? NSRegularExpression(pattern: pattern) else { return nil }
+        regexCache[pattern] = regex
+        return regex
+    }
+
+    private func rangeIntersectsCodeSpan(_ range: NSRange, in attributed: NSAttributedString) -> Bool {
+        guard range.location + range.length <= attributed.length else { return false }
+        var found = false
+        attributed.enumerateAttribute(Self.codeSpanSentinel, in: range, options: []) { value, _, stop in
+            if value != nil {
+                found = true
+                stop.pointee = true
+            }
+        }
+        return found
+    }
+
+    private func applyInlineMathPattern(to result: NSMutableAttributedString) {
+        // Pandoc-style inline-math rule:
+        //   - opening `$` not preceded by `$` (so `$$` is display math)
+        //   - opening `$` not followed by `$`, space, OR digit (so `$1`, `$10.50` are money,
+        //     not math openers — without this, paragraphs containing `…thanks ($1) for …
+        //     thanks ($10) for …` matched the entire span between the two `$` as math)
+        //   - closing `$` not preceded by space, not followed by `$` or digit
+        //   - content capped at 200 chars to bound runaway lazy matches
+        let pattern = MarkdownParser.inlineMathPattern  // C7: shared canonical pattern
+        guard let regex = Self.cachedRegex(pattern) else { return }
+        let string = result.string as NSString
+
+        let matches = regex.matches(in: result.string, range: NSRange(location: 0, length: string.length)).reversed()
+
+        for match in matches {
+            guard match.numberOfRanges >= 2 else { continue }
+            let fullRange = match.range(at: 0)
+            if rangeIntersectsCodeSpan(fullRange, in: result) { continue }
+
+            let contentRange = match.range(at: 1)
+            let latex = string.substring(with: contentRange)
+            let cacheKey = "math-inline-\(theme.id)-" + latex
+
+            // Preserve the existing attributes (especially .paragraphStyle, which carries the
+            // table-cell textBlocks attribute). NSAttributedString(attachment:) and a fresh
+            // dictionary both strip the paragraph style; without it, table cells containing math
+            // lose their textBlock binding and render as full-width rows outside the table.
+            let existing = result.attributes(at: fullRange.location, effectiveRange: nil)
+
+            if let cached = Coordinator.diagramCache.object(forKey: cacheKey as NSString) {
+                // Replace with image attachment, sized to match the surrounding line height.
+                // takeSnapshot returns NSImages whose pixel dimensions are at the device scale
+                // (2x on retina), and NSTextAttachment displays at NSImage.size in points —
+                // without explicit bounds, math renders 2x bigger than text and breaks line
+                // metrics + table cell widths. Scale to the body font's point size, preserving
+                // aspect ratio, with a small descent offset so the math sits on the baseline.
+                let attachment = NSTextAttachment()
+                attachment.image = cached
+                let baseFontSize: CGFloat = mainFont(size: 14 * zoomLevel).pointSize
+                let aspect = cached.size.height > 0 ? cached.size.width / cached.size.height : 1
+                let displayHeight = baseFontSize * 1.1
+                let displayWidth = displayHeight * aspect
+                attachment.bounds = CGRect(x: 0, y: -2, width: displayWidth, height: displayHeight)
+                let replacement = NSMutableAttributedString(attachment: attachment)
+                replacement.addAttributes(existing, range: NSRange(location: 0, length: replacement.length))
+                result.replaceCharacters(in: fullRange, with: replacement)
+            } else {
+                // Style as code-like placeholder and trigger async render. Merge math styling
+                // on top of the existing attrs so paragraph style is preserved (see above).
+                var attributes = existing
+                attributes[.font] = fixedFont(size: 13 * zoomLevel)
+                attributes[.foregroundColor] = theme.purpleColor
+                result.replaceCharacters(in: fullRange, with: NSAttributedString(string: latex, attributes: attributes))
+
+                // Captured locally so the notification carries the document this inline math
+                // belongs to — a different pane's coordinator ignores it (Plan 003).
+                let docId = documentId
+                Task { @MainActor in
+                    WebRenderer.shared.renderMath(latex, displayMode: false, foregroundHex: theme.textHex) { image in
+                        guard let image = image else { return }
+                        Coordinator.diagramCache.setObject(image, forKey: cacheKey as NSString)
+                        NotificationCenter.default.post(name: .diagramRendered, object: docId)
+                    }
+                }
+            }
+        }
+    }
+
+    // MARK: - Helpers
+
+    private func mainFont(size: CGFloat) -> NSFont {
+        PreviewFontCatalog.mainFont(id: mainFontID, size: size)
+    }
+
+    private func fixedFont(size: CGFloat) -> NSFont {
+        PreviewFontCatalog.fixedFont(id: fixedFontID, size: size)
+    }
+
+}
+
+// MARK: - NSFont Extensions
+
+extension NSFont {
+    func withWeight(_ weight: NSFont.Weight) -> NSFont {
+        let descriptor = fontDescriptor.addingAttributes([
+            .traits: [NSFontDescriptor.TraitKey.weight: weight]
+        ])
+        return NSFont(descriptor: descriptor, size: pointSize) ?? self
+    }
+
+    func withTraits(_ traits: NSFontDescriptor.SymbolicTraits) -> NSFont {
+        let descriptor = fontDescriptor.withSymbolicTraits(traits)
+        return NSFont(descriptor: descriptor, size: pointSize) ?? self
+    }
+}
+
+// MARK: - Preview text view (column alignment)
+
+/// The preview's NSTextView, able to place its fixed-width text column left, center, or right
+/// within the pane.
+///
+/// Why a subclass: `textContainerInset` is symmetric — the same value pads both sides — so it
+/// can express "centered" at best and can never express "right". Overriding
+/// `textContainerOrigin` is AppKit's supported hook for positioning the container; drawing,
+/// hit-testing (link clicks, selection), and temporary-attribute highlights all route through
+/// it, so everything stays consistent with the moved column.
+final class PreviewTextView: NSTextView {
+    var contentAlignment: SettingsManager.ContentAlignment = .left {
+        didSet {
+            guard oldValue != contentAlignment else { return }
+            invalidateTextContainerOrigin()
+            needsDisplay = true
+        }
+    }
+
+    /// Maximum column width from the Content Width setting; nil = fill the pane.
+    var preferredColumnWidth: CGFloat? = 800 {
+        didSet {
+            guard oldValue != preferredColumnWidth else { return }
+            // A settings change reflows every line, so a raw scroll offset would land on
+            // different text. Pin the first visible character instead. (Resizes skip this —
+            // they take the cheap path and behave like any wrapping text view.)
+            let anchor = firstVisibleCharacterIndex()
+            updateColumnWidth()
+            // Deferred: this setter runs INSIDE updateNSView, and scrolling fires the
+            // bounds-change observer synchronously; nothing may react to that during the
+            // SwiftUI update pass (the hazard reportMatchCount defers around).
+            if let anchor {
+                Task { @MainActor [weak self] in
+                    self?.scrollCharacterToTop(anchor)
+                }
+            }
+        }
+    }
+
+    nonisolated private static let minimumColumnWidth: CGFloat = 200
+
+    /// Pure width math (unit-tested). Not yet sized (width 0 during construction) → use the
+    /// preferred width so the first layout isn't done at a throwaway size.
+    nonisolated static func columnWidth(preferred: CGFloat?, viewWidth: CGFloat, inset: CGFloat) -> CGFloat {
+        guard viewWidth > 0 else { return preferred ?? 800 }
+        let available = max(minimumColumnWidth, viewWidth - inset * 2)
+        guard let preferred else { return available }
+        return min(preferred, available)
+    }
+
+    private func updateColumnWidth() {
+        guard let container = textContainer else { return }
+        let width = Self.columnWidth(
+            preferred: preferredColumnWidth,
+            viewWidth: bounds.width,
+            inset: textContainerInset.width
+        )
+        // Equality guard: setting containerSize relayouts, relayout changes our height, and
+        // a height change re-enters setFrameSize → here. Same width must be a no-op.
+        if abs(container.containerSize.width - width) > 0.5 {
+            container.containerSize = NSSize(width: width, height: CGFloat.greatestFiniteMagnitude)
+        }
+        invalidateTextContainerOrigin()
+        needsDisplay = true
+    }
+
+    func updateColumnWidthForCurrentInsets() {
+        let anchor = firstVisibleCharacterIndex()
+        updateColumnWidth()
+        if let anchor {
+            Task { @MainActor [weak self] in
+                self?.scrollCharacterToTop(anchor)
+            }
+        }
+    }
+
+    private func firstVisibleCharacterIndex() -> Int? {
+        guard let layoutManager, let textContainer, let storage = textStorage, storage.length > 0,
+              enclosingScrollView != nil else { return nil }
+        let origin = textContainerOrigin
+        let point = NSPoint(x: 1, y: max(0, visibleRect.minY - origin.y) + 1)
+        let glyph = layoutManager.glyphIndex(for: point, in: textContainer)
+        return layoutManager.characterIndexForGlyph(at: glyph)
+    }
+
+    private func scrollCharacterToTop(_ index: Int) {
+        guard let layoutManager, let textContainer, let scrollView = enclosingScrollView,
+              let storage = textStorage, index < storage.length else { return }
+        // One-off full layout (settings change only): the view's height is stale until the
+        // reflow completes, and the clamp below needs the real one.
+        layoutManager.ensureLayout(for: textContainer)
+        sizeToFit()
+        let glyphRange = layoutManager.glyphRange(forCharacterRange: NSRange(location: index, length: 1), actualCharacterRange: nil)
+        let rect = layoutManager.boundingRect(forGlyphRange: glyphRange, in: textContainer)
+        let maxY = max(0, frame.height - scrollView.contentView.bounds.height)
+        let y = min(max(0, rect.minY + textContainerOrigin.y), maxY)
+        scrollView.contentView.setBoundsOrigin(NSPoint(x: 0, y: y))
+        scrollView.reflectScrolledClipView(scrollView.contentView)
+    }
+
+    // MARK: Code-block copy button
+
+    static let codeBlockKey = NSAttributedString.Key("zMD.codeBlock")
+
+    private var hoverTrackingArea: NSTrackingArea?
+    private var hoveredCodeBlock: CodeBlockPayload?
+    private lazy var codeCopyButton: CodeCopyButton = {
+        let button = CodeCopyButton(target: self, action: #selector(copyHoveredCodeBlock))
+        button.isHidden = true
+        addSubview(button)
+        return button
+    }()
+    // nonisolated(unsafe): main-actor only in practice; annotated solely so nonisolated
+    // deinit can invalidate it (deinit has exclusive access).
+    nonisolated(unsafe) private var copyConfirmationTimer: Timer?
+
+    deinit {
+        copyConfirmationTimer?.invalidate()
+        NotificationCenter.default.removeObserver(self)
+    }
+
+    override func updateTrackingAreas() {
+        super.updateTrackingAreas()
+        if let hoverTrackingArea { removeTrackingArea(hoverTrackingArea) }
+        let area = NSTrackingArea(
+            rect: .zero,
+            options: [.mouseMoved, .mouseEnteredAndExited, .activeInActiveApp, .inVisibleRect],
+            owner: self,
+            userInfo: nil
+        )
+        addTrackingArea(area)
+        hoverTrackingArea = area
+    }
+
+    override func viewDidMoveToWindow() {
+        super.viewDidMoveToWindow()
+        // A rebuild replaces the storage wholesale; the hovered block's geometry is then
+        // meaningless, so drop the button until the mouse next moves.
+        NotificationCenter.default.removeObserver(self, name: NSTextStorage.didProcessEditingNotification, object: nil)
+        if window != nil, let textStorage {
+            NotificationCenter.default.addObserver(
+                self,
+                selector: #selector(previewStorageDidEdit(_:)),
+                name: NSTextStorage.didProcessEditingNotification,
+                object: textStorage
+            )
+        }
+    }
+
+    @objc private func previewStorageDidEdit(_ note: Notification) {
+        guard let storage = note.object as? NSTextStorage,
+              storage.editedMask.contains(.editedCharacters) else { return }
+        hideCodeCopyButton()
+    }
+
+    override func mouseMoved(with event: NSEvent) {
+        super.mouseMoved(with: event)
+        let point = convert(event.locationInWindow, from: nil)
+        guard let (payload, rect) = codeBlock(at: point) else {
+            hideCodeCopyButton()
+            return
+        }
+        if payload !== hoveredCodeBlock {
+            hoveredCodeBlock = payload
+            codeCopyButton.showCopyState()
+        }
+        // Top-right corner, just inside the block's border.
+        let size = CodeCopyButton.size
+        codeCopyButton.frame = NSRect(x: rect.maxX - size.width - 10, y: rect.minY + 8, width: size.width, height: size.height)
+        codeCopyButton.isHidden = false
+    }
+
+    override func mouseExited(with event: NSEvent) {
+        super.mouseExited(with: event)
+        // Exiting INTO the button (a subview) also fires this; only hide when the pointer
+        // has really left the text view.
+        let point = convert(event.locationInWindow, from: nil)
+        if !bounds.contains(point) { hideCodeCopyButton() }
+    }
+
+    private func hideCodeCopyButton() {
+        guard hoveredCodeBlock != nil || !codeCopyButton.isHidden else { return }
+        hoveredCodeBlock = nil
+        codeCopyButton.isHidden = true
+    }
+
+    /// The code block whose vertical band contains `point` (view coordinates), if any.
+    /// Vertical-only containment is deliberate: hovering to the right of a short line should
+    /// still count as "in the block".
+    private func codeBlock(at point: NSPoint) -> (CodeBlockPayload, NSRect)? {
+        guard let layoutManager, let textContainer, let storage = textStorage, storage.length > 0 else { return nil }
+        let origin = textContainerOrigin
+        let probe = NSPoint(
+            x: min(max(point.x - origin.x, 1), max(1, textContainer.containerSize.width - 1)),
+            y: point.y - origin.y
+        )
+        let glyph = layoutManager.glyphIndex(for: probe, in: textContainer)
+        let charIndex = layoutManager.characterIndexForGlyph(at: glyph)
+        guard charIndex < storage.length else { return nil }
+        var range = NSRange()
+        guard let payload = storage.attribute(
+            Self.codeBlockKey, at: charIndex,
+            longestEffectiveRange: &range,
+            in: NSRange(location: 0, length: storage.length)
+        ) as? CodeBlockPayload else { return nil }
+        let glyphRange = layoutManager.glyphRange(forCharacterRange: range, actualCharacterRange: nil)
+        var rect = layoutManager.boundingRect(forGlyphRange: glyphRange, in: textContainer)
+        rect.origin.x += origin.x
+        rect.origin.y += origin.y
+        // glyphIndex(for:) returns the NEAREST glyph even for points outside all text.
+        guard point.y >= rect.minY, point.y <= rect.maxY else { return nil }
+        return (payload, rect)
+    }
+
+    @objc private func copyHoveredCodeBlock() {
+        guard let payload = hoveredCodeBlock else { return }
+        copyToPasteboard(payload.code)
+        // Confirm at the point of action (the button itself), not with a distant toast.
+        codeCopyButton.showCopiedState()
+        copyConfirmationTimer?.invalidate()
+        copyConfirmationTimer = Timer.scheduledTimer(withTimeInterval: 1.2, repeats: false) { [weak self] _ in
+            Task { @MainActor [weak self] in
+                self?.codeCopyButton.showCopyState()
+            }
+        }
+    }
+
+    /// Test seam: the suite substitutes a private named pasteboard so running tests never
+    /// clobbers the user's real clipboard.
+    var pasteboard: NSPasteboard = .general
+
+    private func copyToPasteboard(_ string: String) {
+        pasteboard.clearContents()
+        pasteboard.setString(string, forType: .string)
+    }
+
+    /// Right-click → "Copy Code Block": the hover button is unreachable by keyboard and
+    /// VoiceOver, so the same action must exist somewhere that isn't hover-gated.
+    override func menu(for event: NSEvent) -> NSMenu? {
+        let baseMenu = super.menu(for: event)
+        let point = convert(event.locationInWindow, from: nil)
+        guard let (payload, _) = codeBlock(at: point) else { return baseMenu }
+        let menu = baseMenu ?? NSMenu()
+        let item = NSMenuItem(title: "Copy Code Block", action: #selector(copyCodeBlockFromMenu(_:)), keyEquivalent: "")
+        item.target = self
+        item.representedObject = payload
+        menu.insertItem(item, at: 0)
+        menu.insertItem(.separator(), at: 1)
+        return menu
+    }
+
+    @objc private func copyCodeBlockFromMenu(_ sender: NSMenuItem) {
+        guard let payload = sender.representedObject as? CodeBlockPayload else { return }
+        copyToPasteboard(payload.code)
+    }
+
+    // MARK: Column geometry
+
+    override var textContainerOrigin: NSPoint {
+        let base = super.textContainerOrigin
+        guard let container = textContainer else { return base }
+        let x = Self.containerOriginX(
+            alignment: contentAlignment,
+            viewWidth: bounds.width,
+            containerWidth: container.containerSize.width,
+            inset: textContainerInset.width
+        )
+        return NSPoint(x: x, y: base.y)
+    }
+
+    /// A resize changes both how wide the column may be and the free space it floats in
+    /// (AppKit caches the origin, so it must be invalidated).
+    override func setFrameSize(_ newSize: NSSize) {
+        super.setFrameSize(newSize)
+        updateColumnWidth()
+    }
+
+    /// Pure placement math (unit-tested). The inset is a MINIMUM margin on both sides: when
+    /// the pane has no free space beyond column + margins, every alignment collapses to the
+    /// left position instead of pushing the column off-screen.
+    nonisolated static func containerOriginX(
+        alignment: SettingsManager.ContentAlignment,
+        viewWidth: CGFloat,
+        containerWidth: CGFloat,
+        inset: CGFloat
+    ) -> CGFloat {
+        let freeSpace = viewWidth - containerWidth - inset * 2
+        guard freeSpace > 0 else { return inset }
+        switch alignment {
+        case .left: return inset
+        case .center: return inset + freeSpace / 2
+        case .right: return inset + freeSpace
+        }
+    }
+}
+
+/// Raw source of one rendered code block, attached to its attributed range under
+/// `PreviewTextView.codeBlockKey`. A class (identity equality) on purpose — see appendCodeBlock.
+final class CodeBlockPayload: NSObject {
+    let code: String
+    init(code: String) {
+        self.code = code
+        super.init()
+    }
+}
+
+/// The small hover button in a code block's top-right corner.
+final class CodeCopyButton: NSButton {
+    static let size = NSSize(width: 26, height: 22)
+
+    convenience init(target: AnyObject, action: Selector) {
+        self.init(frame: NSRect(origin: .zero, size: Self.size))
+        self.target = target
+        self.action = action
+        isBordered = false
+        imagePosition = .imageOnly
+        wantsLayer = true
+        layer?.cornerRadius = 5
+        // Opaque-ish backing so the glyph stays legible if a long code line runs under it.
+        layer?.backgroundColor = NSColor.controlBackgroundColor.withAlphaComponent(0.92).cgColor
+        layer?.borderWidth = 0.5
+        layer?.borderColor = NSColor.separatorColor.cgColor
+        toolTip = "Copy code"
+        setAccessibilityLabel("Copy code")
+        showCopyState()
+    }
+
+    func showCopyState() {
+        image = NSImage(systemSymbolName: "doc.on.doc", accessibilityDescription: "Copy code")
+        contentTintColor = .secondaryLabelColor
+    }
+
+    func showCopiedState() {
+        image = NSImage(systemSymbolName: "checkmark", accessibilityDescription: "Copied")
+        contentTintColor = .systemGreen
+    }
+
+    /// The text view underneath sets an I-beam; a button should read as clickable.
+    override func resetCursorRects() {
+        addCursorRect(bounds, cursor: .pointingHand)
+    }
+
+    override func viewDidChangeEffectiveAppearance() {
+        super.viewDidChangeEffectiveAppearance()
+        // CGColors don't track appearance; re-resolve on a light/dark flip.
+        layer?.backgroundColor = NSColor.controlBackgroundColor.withAlphaComponent(0.92).cgColor
+        layer?.borderColor = NSColor.separatorColor.cgColor
+    }
+}
