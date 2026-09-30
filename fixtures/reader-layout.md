@@ -24,7 +24,7 @@ ethernet1/1/24   up     up    100G    1234
 
 ## Image
 
-![Hashlight icon](../Hashlight/Assets.xcassets/AppIcon.appiconset/512.png)
+![Hashlight icon](../design/icon/Hashlight-Frost-1024.png)
 
 ## Compact table
 

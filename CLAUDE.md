@@ -149,9 +149,13 @@ Hashlight/
 ├── FileWatcher.swift        # File change monitoring (drives silent reloads)
 ├── FolderManager.swift      # Folder sidebar tree and folder-wide content search
 ├── QuickOpenView.swift      # Quick open dialog
-├── Assets.xcassets/         # App icon and resources
+├── Assets.xcassets/         # Accent color (no app icon here)
+├── Hashlight.icon/          # App icon (Icon Composer bundle; copy of design/icon/Hashlight.icon)
 └── Hashlight.entitlements   # Sandbox disabled; see Sandboxing Considerations below
 ```
+
+The official icon and brand package is in `design/` (start with `design/BRIEF.md`); `AGENTS.md`
+describes how the icon is wired and what macOS 13–15 show.
 
 ## Development Notes
 

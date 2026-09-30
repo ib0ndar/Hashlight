@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="Hashlight/Assets.xcassets/AppIcon.appiconset/512.png" width="160" alt="Hashlight" />
+  <img src="design/icon/Hashlight-Frost-1024.png" width="160" alt="Hashlight" />
 </p>
 
 <h1 align="center">Hashlight</h1>
@@ -96,6 +96,7 @@ Open .md --> Rendered preview (reloads when the file changes) --> Export PDF/HTM
 - **Zoom** — `⌘+` / `⌘−` / `⌘0`, pinch-to-zoom trackpad gesture
 - **Themes** — System / Light / Dark application appearance, with separate drop-down menus for 102 light and 249 dark Base16 preview themes
 - **Preview fonts** — independently select an installed proportional font for Markdown text and a monospaced font for code and commands
+- **Adaptive icon** — a Liquid Glass `#` lit by an amber spark; on macOS 26 it follows the system's icon style (Frost by default, Ember in dark, plus Clear and Tinted)
 
 ---
 
@@ -173,6 +174,15 @@ Settings → General → Login Items & Extensions → Quick Look.
 | `⌘=` / `⌘−` / `⌘0` | Zoom in / out / reset |
 | `⌘,` | Settings |
 | `⌃Tab` / `⌃⇧Tab` | Next / previous tab |
+
+---
+
+## Icon and Design
+
+The official icon and brand package live in [`design/`](design/); start with
+[`design/BRIEF.md`](design/BRIEF.md). The app compiles `Hashlight/Hashlight.icon`, an Icon Composer
+bundle: macOS 26 renders it with the system's icon style, and Xcode generates a flattened Frost
+fallback for macOS 13–15. `design/icon/Hashlight-Frost-1024.png` is the canonical marketing image.
 
 ---
 

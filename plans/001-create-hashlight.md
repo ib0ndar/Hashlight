@@ -56,7 +56,7 @@ The user chose to continue zMD Viewer as an independent project called **Hashlig
 
 ## Open items
 
-- A designed app icon to replace the placeholder.
+- ~~A designed app icon to replace the placeholder.~~ Done in plan 002 (official icon).
 - The Release configuration still carries zMD's original signing settings (`Developer ID
   Application`, team `5JJ6G6A84S`); local compiles and `build-dmg.sh` override them.
 - In the dark theme, KaTeX images have a white background (inherited from zMD; see `AGENTS.md`).

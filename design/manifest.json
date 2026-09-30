@@ -1,0 +1,53 @@
+{
+  "package": "hashlight-handover",
+  "prepared": "2026-09-30",
+  "product": {
+    "name": "Hashlight",
+    "type": "Markdown viewer for macOS",
+    "app_store_title_suggestion": "Hashlight — Markdown Viewer",
+    "bundle_id_suggestion": "app.hashlight.Hashlight",
+    "status": "name cleared; icon final; product spec not included"
+  },
+  "name_clearance": {
+    "checked": "2026-09-30",
+    "app_stores": "no conflicts (Mac, iOS)",
+    "trademarks": {"USPTO": "0 records", "TMview_EU_UK_WIPO": "0 records"},
+    "domains_free": ["hashlight.app", "hashlight.io", "hashlight.dev", "hashlight.net", "hashlight.md"],
+    "taken": {"npm": "hashlight", "github_user": "hashlight", "hashlight.com": "aftermarket"},
+    "report": "naming/name-clearance-report.md"
+  },
+  "icon": {
+    "design": "Glass family, variant A (round caps); glass '#' lit by an amber spark",
+    "appearances": {"default": "Frost", "dark": "Ember", "clear_tinted": "system-derived"},
+    "icon_composer_bundle": "icon/Hashlight.icon",
+    "icon_set_name_build_setting": "Hashlight",
+    "icns": {"default": "icon/Hashlight-Frost.icns", "dark": "icon/Hashlight-Ember.icns"},
+    "marketing_png": {"canonical": "icon/Hashlight-Frost-1024.png", "dark": "icon/Hashlight-Ember-1024.png"},
+    "previews": "icon/previews/",
+    "sources": {"masters": "icon/source/", "layers": "icon/source/layers/"},
+    "validated_with": "xcrun actool (Xcode 27, macOS 26.7)"
+  },
+  "adaptive_icon_behaviour": {
+    "macos_26_plus": "system handles via Icon & widget style; no app toggle",
+    "macos_13_15": {
+      "preference": "Dock icon: Frost / Ember / Match appearance",
+      "default": "Frost",
+      "mechanism": "NSApp.applicationIconImage observing effectiveAppearance; running Dock tile only",
+      "do_not": "rewrite bundle icon on disk"
+    }
+  },
+  "palette": {
+    "accent_amber": ["#F59E0B", "#FBBF24", "#FDE68A"],
+    "frost_background": ["#F7F5F0", "#CFC9BD"],
+    "ember_background": ["#232A36", "#0B0E14"],
+    "ember_glass": "#8A919C",
+    "ember_cool_glow": "#0EA5E9",
+    "avoid": "white # on blue-violet-pink gradient (hashtag-app genre, Clearly Markdown)"
+  },
+  "open_items": [
+    "minimum macOS version",
+    "distribution: Mac App Store vs direct",
+    "feature scope",
+    "register hashlight.app; confirm bundle identifier"
+  ]
+}

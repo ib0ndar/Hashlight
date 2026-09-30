@@ -40,8 +40,8 @@ gh repo view ib0ndar/Hashlight --json nameWithOwner,defaultBranchRef,viewerPermi
 - The version is 1.0.0. There are four `MARKETING_VERSION` values in
   `Hashlight.xcodeproj/project.pbxproj` (Debug and Release for the app and the Quick Look
   extension); change them together and check that the built app and embedded extension agree.
-- The app icon is a generated placeholder (a glowing "#"); the drawing script is not part of the
-  repository. Replace it when there is a designed icon.
+- The app icon is the official Hashlight icon, delivered as a design package in `design/` (read
+  `design/BRIEF.md`). See "App icon and design assets" below.
 - The Release configuration still carries zMD's original signing settings (`Developer ID
   Application`, team `5JJ6G6A84S`). Local release compiles and `build-dmg.sh` override them; do not
   rely on them.
@@ -83,6 +83,39 @@ Main components:
   watching and closing, Quick Look, themes, fonts, and table layout.
 
 Read `CLAUDE.md` for the longer architecture guide and `CONTRIBUTING.md` for code conventions.
+
+## App icon and design assets
+
+`design/` holds the official brand and icon package exactly as delivered on 2026-09-30 (its
+`README.md`, `BRIEF.md`, `manifest.json`, `icon/`, `naming/`, and `tools/`). It is the source of
+truth: do not edit its files by hand; change the SVG masters or `design/tools/`, regenerate, and
+copy the results.
+
+- **The compiled icon** is `Hashlight/Hashlight.icon`, an Icon Composer bundle placed beside (not
+  inside) `Assets.xcassets`, following `design/BRIEF.md` §4.1. It must stay identical to
+  `design/icon/Hashlight.icon` (`diff -r` them after any change). Appearances: Default = Frost,
+  Dark = Ember; Clear and Tinted are derived by the system.
+- **Wiring.** The project reference has type `folder.iconcomposer.icon` and is in the app target's
+  Resources phase; `ASSETCATALOG_COMPILER_APPICON_NAME = Hashlight` in both configurations. The
+  asset catalog has no `AppIcon` set. `Hashlight/Info.plist` does not set `CFBundleIconFile` or
+  `CFBundleIconName`: the asset compiler writes both as `Hashlight`, builds `Assets.car`, and
+  generates a flattened `Hashlight.icns` fallback because the deployment target is macOS 13. The
+  Markdown document type's `CFBundleTypeIconFile` points at that `Hashlight` icon.
+- **macOS 26+** shows the layered icon and switches it with System Settings → Appearance → Icon &
+  widget style. Do not add an app-level icon toggle there (brief §4.2). The app's own Light/Dark
+  setting does not change the icon.
+- **macOS 13–15** show Xcode's flattened Frost fallback from `Assets.car`, not the hand-tuned 16
+  and 32 px renditions in `design/icon/Hashlight-Frost.icns`. Brief §4.1 step 3 suggests pointing
+  `CFBundleIconFile` at that `.icns`, but with an Icon Composer icon, current Xcode makes the
+  catalog icon win on every macOS version (Apple: "by design"), and the known workarounds need
+  Xcode 26.0.1 or a checked-in prebuilt `Assets.car`. It is not done; revisit only with the user
+  and a macOS 15 machine to verify on.
+- **Not implemented (optional, brief §4.2):** the macOS 13–15 "Dock icon: Frost / Ember / Match
+  appearance" preference. It would add `DockIcon-Frost`/`DockIcon-Ember` image sets made from the
+  1024 px PNGs and set `NSApp.applicationIconImage`; ask the user before adding it.
+- **Marketing image:** `design/icon/Hashlight-Frost-1024.png` (README, website, listings).
+- The brief's suggested bundle identifier `app.hashlight.Hashlight` is not used; the user chose
+  `io.github.ib0ndar.hashlight`. Changing it would reset users' settings.
 
 ## Settings and rendering invariants
 

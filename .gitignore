@@ -91,6 +91,11 @@ tmp/
 # Local scratch output: investigation notes, screenshots, and temporary files
 artifacts/
 
+# Output of the icon tools in design/tools/ (copy results into design/icon/ and the app by hand)
+design/tools/final/
+design/tools/svg/
+__pycache__/
+
 # Agent tooling (local skill installs — see npx skills)
 .agents/
 .claude/
