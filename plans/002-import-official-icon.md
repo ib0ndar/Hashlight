@@ -32,10 +32,11 @@ The package's icons are the official Hashlight icons. Import them and follow the
   uses that on every version; Apple told developers this is by design. A plain `CFBundleIconFile`
   therefore would not bring back the hand-tuned 16/32 px renditions. The workarounds people
   report need Xcode 26.0.1 or a checked-in prebuilt `Assets.car`, and this Mac cannot verify the
-  result on macOS 15. The comparison is in the build notes: the generated fallback's 16/32 px
-  icons have less contrast than the designer's, and there is no separate 32 px @1x rendition.
-- **Brief §4.2 optional Dock-icon preference for macOS 13–15.** Optional in the brief; not
-  requested. `design/icon/Hashlight-Ember.icns` and the 1024 px PNGs are available for it.
+  result on macOS 15. [`002-small-icon-comparison.png`](002-small-icon-comparison.png) compares
+  them, upscaled: top row Xcode's generated fallback, bottom row the designer's Frost `.icns`, at
+  16 px, 32 px, 16 pt @2x, and 128 px. The fallback has less contrast and no 32 px @1x rendition.
+- **Brief §4.2 optional Dock-icon preference for macOS 13–15.** Not done here; it is the next
+  task, planned in [`003-dock-icon-preference.md`](003-dock-icon-preference.md).
 - **Brief suggestions outside the icon:** the amber accent colour for UI (the app keeps the
   system accent) and the bundle identifier `app.hashlight.Hashlight` (the user chose
   `io.github.ib0ndar.hashlight`).

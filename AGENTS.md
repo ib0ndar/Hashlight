@@ -3,6 +3,9 @@
 This file is the repository-specific source of truth for coding agents working on Hashlight. Read
 it before changing code, choosing a version number, creating a tag, or pushing anything.
 
+Start with `HANDOVER.md` for the current state, open decisions, and hands-on testing notes, and with
+`plans/README.md` for finished and upcoming work (the next task is plan 003).
+
 ## Repository identity and origin
 
 - The authoritative repository is **https://github.com/ib0ndar/Hashlight** (public, default branch
@@ -110,9 +113,9 @@ copy the results.
   catalog icon win on every macOS version (Apple: "by design"), and the known workarounds need
   Xcode 26.0.1 or a checked-in prebuilt `Assets.car`. It is not done; revisit only with the user
   and a macOS 15 machine to verify on.
-- **Not implemented (optional, brief §4.2):** the macOS 13–15 "Dock icon: Frost / Ember / Match
-  appearance" preference. It would add `DockIcon-Frost`/`DockIcon-Ember` image sets made from the
-  1024 px PNGs and set `NSApp.applicationIconImage`; ask the user before adding it.
+- **Not implemented yet (brief §4.2):** the macOS 13–15 "Dock icon: Frost / Ember / Match
+  appearance" preference. It is the next task, planned in `plans/003-dock-icon-preference.md`;
+  that plan has questions for the owner to answer before starting.
 - **Marketing image:** `design/icon/Hashlight-Frost-1024.png` (README, website, listings).
 - The brief's suggested bundle identifier `app.hashlight.Hashlight` is not used; the user chose
   `io.github.ib0ndar.hashlight`. Changing it would reset users' settings.
