@@ -37,8 +37,7 @@ A clean build produces **zero warnings**. Please keep it that way.
 
 ## Project layout
 
-The architecture is documented in [CLAUDE.md](CLAUDE.md) (it doubles as the
-developer guide). The short version:
+The main pieces, all in `Hashlight/`:
 
 - `DocumentManager.swift` — central document state (tabs, loading,
   reloading on external changes, find state). Always go through its

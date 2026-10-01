@@ -2,8 +2,8 @@ import XCTest
 @testable import Hashlight
 
 /// Characterization tests for `MarkdownParser.parse`/`.toHTML` block-level constructs.
-/// These pin the parser's *current* behavior (per its own simplified, non-CommonMark-complete
-/// design — see CLAUDE.md's "Known Limitations") rather than assert conformance to any spec.
+/// These pin the parser's *current* behavior (its own simplified, non-CommonMark-complete
+/// design) rather than assert conformance to any spec.
 /// Deliberate behavior changes should update these tests, not treat a failure as automatically
 /// wrong.
 nonisolated final class MarkdownParserTests: XCTestCase {

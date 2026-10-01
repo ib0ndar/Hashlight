@@ -100,3 +100,10 @@ __pycache__/
 .agents/
 .claude/
 skills-lock.json
+
+# Agent and harness working files: kept locally, never published (owner's decision, 2026-10-01)
+AGENTS.md
+CLAUDE.md
+HANDOVER.md
+plans/
+.playwright-mcp/

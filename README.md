@@ -7,7 +7,7 @@
 <p align="center">
   <strong>Native macOS Markdown viewer</strong><br/>
   A lightweight, Typora-inspired reader with tabs, a files-and-outline sidebar, folder search, and full export support. It never changes your files.<br/><br/>
-  <a href="https://github.com/ib0ndar/Hashlight/issues">Issues</a> · <a href="https://github.com/ib0ndar/Hashlight/blob/main/CLAUDE.md">Developer Guide</a>
+  <a href="https://github.com/ib0ndar/Hashlight/issues">Issues</a> · <a href="https://github.com/ib0ndar/Hashlight/blob/main/CONTRIBUTING.md">Contributing</a>
 </p>
 
 <p align="center">
