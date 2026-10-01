@@ -6,7 +6,7 @@
 
 <p align="center">
   <strong>Native macOS Markdown viewer</strong><br/>
-  A lightweight, Typora-inspired reader with tabs, a files-and-outline sidebar, folder search, and full export support. It never changes your files.<br/><br/>
+  A fast, read-only Markdown reader with tabs, a files-and-outline sidebar, folder search, and export to PDF, HTML, and Word. It never changes your files.<br/><br/>
   <a href="https://github.com/ib0ndar/Hashlight/issues">Issues</a> · <a href="https://github.com/ib0ndar/Hashlight/blob/main/CONTRIBUTING.md">Contributing</a>
 </p>
 
@@ -19,7 +19,7 @@
 
 ---
 
-## Origin
+## What It Is
 
 Hashlight is a Markdown reader for macOS. Open a file and it renders instantly; when another app
 changes the file, the tab follows along without asking. It reads and exports, and never writes to
@@ -28,15 +28,22 @@ your Markdown: there is no editor, no saving, and nothing to confirm when you cl
 It's a native SwiftUI app built around Apple's `NSTextView` rather than a web view — no
 Electron, no Tauri.
 
-Hashlight grew out of [zMD](https://github.com/umzcio/zMD) by Zachary Rossmiller. It keeps zMD's
-renderer, navigation, and exports; the editor and the updater stay behind.
+### Origin
+
+Hashlight grew out of [zMD](https://github.com/umzcio/zMD) by Zachary Rossmiller, a Markdown
+editor. It took only zMD's reading side — the renderer, the navigation, and the exports — and left
+the editor and the updater behind. That foundation has since been reworked heavily: a new window
+built around a navigator sidebar and a Liquid Glass toolbar, three Settings panes, System themes
+drawn from macOS's own colors, rounded code and table cards, a folding frontmatter card, and more.
+Hashlight shares nothing with zMD at run time; the two can be installed side by side (see
+[Next to zMD](#next-to-zmd)).
 
 ---
 
 ## How It Works
 
 ```
-Open .md --> Rendered preview (reloads when the file changes) --> Export PDF/HTML/Word
+Open .md --> Rendered document (reloads when the file changes) --> Export PDF/HTML/Word
 ```
 
 1. **Open a file**: `⌘O` or the toolbar's Open button, drag and drop, double-click in Finder, Open Recent, or a folder in the sidebar
@@ -48,8 +55,8 @@ Open .md --> Rendered preview (reloads when the file changes) --> Export PDF/HTM
 
 ## Features
 
-### Preview Rendering
-- **Typora-style typography** — rendered headings, proper line-height, collapsed syntax markers
+### Rendering
+- **Reading typography** — styled headings with rules, comfortable line height, no raw Markdown syntax on screen
 - **Emphasis via asterisks** — `*italic*` / `**bold**`; underscore emphasis (`_text_`) is not supported by design
 - **Syntax highlighting** for Swift, Python, JavaScript, TypeScript, C/C++, Bash, SQL, JSON, HTML, XML, YAML
 - **Mermaid diagrams** — flowcharts, sequence diagrams, class diagrams rendered inline
@@ -59,7 +66,7 @@ Open .md --> Rendered preview (reloads when the file changes) --> Export PDF/HTM
 - **YAML frontmatter** — a leading `---` block folds into a card labelled with its `title` (or "Document Info" and the key names when there is none), as in Xcode; click the row to show the YAML, or turn the card off in Settings → Viewing → Show frontmatter
 - **Clickable links** — external URLs open in browser, relative `.md` links open as new tabs
 - **Task lists** — `- [ ]` / `- [x]` rendered as read-only checkboxes
-- **GitHub alerts** — `> [!NOTE]`, `[!TIP]`, `[!IMPORTANT]`, `[!WARNING]`, `[!CAUTION]` callouts (preview and every export)
+- **GitHub alerts** — `> [!NOTE]`, `[!TIP]`, `[!IMPORTANT]`, `[!WARNING]`, `[!CAUTION]` callouts (on screen and in every export)
 - **Code block copy** — hover a code block for a copy button, or right-click → Copy Code Block
 - **Layout** — position the text column left / center / right and choose its width (Narrow → Full), from Settings → Viewing or the status bar
 
@@ -95,12 +102,12 @@ Open .md --> Rendered preview (reloads when the file changes) --> Export PDF/HTM
 - **Focus mode** (`⌘⇧F`) — hides the sidebar, toolbar items, tabs, and status bar, centers content at 720px max; a floating (Liquid Glass) exit button appears on hover
 - **Status bar** — word count, character count, reading time, layout, zoom, detected encoding
 - **Zoom** — `⌘+` / `⌘−` / `⌘0`, pinch-to-zoom trackpad gesture
-- **Themes** — System / Light / Dark application appearance, with separate drop-down menus for the light and dark preview theme: a **System** theme (the default) built from macOS's own colors (text background, labels, separators, your accent color for headings and links), plus 102 light and 249 dark Base16 palettes
-- **Preview fonts** — independently select an installed proportional font for Markdown text and a monospaced font for code and commands
+- **Themes** — System / Light / Dark application appearance, with separate menus for the light and dark document theme: a **System** theme (the default) built from macOS's own colors (text background, labels, separators, your accent color for headings and links), plus 102 light and 249 dark Base16 palettes
+- **Fonts** — independently select an installed proportional font for Markdown text and a monospaced font for code and commands
 - **Adaptive icon** — a Liquid Glass `#` lit by an amber spark; on macOS 26 it follows the system's icon style (Frost by default, Ember in dark, plus Clear and Tinted)
 - **Dock icon** — keep the system's choice or always show Frost or Ember in the Dock and app switcher (Settings → General)
-- **Settings** — three panes: **General** (appearance, Dock icon), **Preview** (themes, fonts, layout), and **Tables** (column categories); Settings reopens on the pane you used last
-- **About** — Hashlight → About Hashlight shows the version, the icon the Dock shows, and the zMD credit
+- **Settings** — three panes: **General** (appearance, Dock icon, tabs), **Viewing** (themes, fonts, layout, frontmatter), and **Tables** (column categories); Settings reopens on the pane you used last
+- **About** — Hashlight → About Hashlight shows the version, the icon the Dock shows, and credits zMD
 
 ---
 
@@ -110,7 +117,7 @@ Open .md --> Rendered preview (reloads when the file changes) --> Export PDF/HTM
 |-------|-----------|
 | **UI** | SwiftUI + AppKit interop |
 | **Text engine** | `NSTextView` (Apple's native text system, not a web view) |
-| **Parser** | Custom line-based markdown parser (single source of truth for preview + export) |
+| **Parser** | Custom line-based markdown parser (single source of truth for the window and every export) |
 | **Syntax highlighting** | Regex-based, ~10 language grammars |
 | **Diagrams / Math** | Headless `WKWebView` with Mermaid + KaTeX CDN scripts |
 | **File watching** | `DispatchSourceFileSystemObject` + `FSEventStream` for directories |
@@ -154,8 +161,9 @@ Settings → Privacy & Security → Open Anyway).
 ### Next to zMD
 
 Hashlight (`io.github.ib0ndar.hashlight`) has its own settings and imports nothing from zMD. With
-both installed, each offers to open Markdown files and each ships a Quick Look extension. Finder uses one Markdown Quick Look extension at a time; switch it in System
-Settings → General → Login Items & Extensions → Quick Look.
+both installed, each offers to open Markdown files and each ships a Quick Look extension. Finder
+uses one Markdown Quick Look extension at a time; switch it in System Settings → General → Login
+Items & Extensions → Quick Look.
 
 ---
 
