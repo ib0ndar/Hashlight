@@ -91,7 +91,7 @@ enum HelpHTML {
         <p>The choice changes the icon in the Dock, the app switcher, the welcome screen, and Hashlight → About Hashlight while Hashlight runs. Finder keeps the standard icon.</p>
         <h3>Theme (Viewing)</h3>
         <p>Use the <strong>Light mode</strong> and <strong>Dark mode</strong> menus to choose a
-        separate theme for each appearance. <strong>System</strong> uses macOS's own colors: the
+        separate theme for each appearance. <strong>System</strong>, the default, uses macOS's own colors: the
         text background, label and separator colors, your accent color for headings and links, and
         the system reds, greens and so on for code; it follows changes to the accent color and to
         Increase Contrast. The other entries are Base16 palettes. The preview switches between the
@@ -154,6 +154,7 @@ enum HelpHTML {
             <li>Mermaid diagrams and LaTeX math</li>
             <li>GitHub alerts such as <code>&gt; [!NOTE]</code></li>
             <li>Horizontal rules</li>
+            <li>YAML frontmatter, shown as a collapsed "Document Info" row at the top; click it to see the values</li>
         </ul>
 
         <h2>Tips</h2>

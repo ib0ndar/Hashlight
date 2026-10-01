@@ -641,6 +641,53 @@ nonisolated final class PreviewBehaviorTests: XCTestCase {
     }
 
     @MainActor
+    func testFrontmatterStartsCollapsedAndOpensFromItsHeader() throws {
+        let restore = preserveDocumentState()
+        defer { restore() }
+        let source = "---\ntitle: Rendering check\nauthor: Hashlight\n---\n\n# Body\n"
+        let url = FileManager.default.temporaryDirectory.appendingPathComponent("hashlight-frontmatter-\(UUID().uuidString).md")
+        _ = show(source, at: url)
+
+        let harness = PreviewHarness()
+        waitUntil("the document renders", in: harness) { harness.textView?.string.contains("Body") == true }
+        let textView = try XCTUnwrap(harness.textView)
+
+        // Collapsed by default: the header names the keys, the values are not shown.
+        XCTAssertTrue(textView.string.contains("▸ Document Info"), textView.string)
+        XCTAssertTrue(textView.string.contains("title, author"))
+        XCTAssertFalse(textView.string.contains("Rendering check"))
+
+        func clickHeader() throws {
+            let layoutManager = try XCTUnwrap(textView.layoutManager)
+            let container = try XCTUnwrap(textView.textContainer)
+            layoutManager.ensureLayout(for: container)
+            let header = (textView.string as NSString).range(of: "Document Info").location
+            let glyph = layoutManager.glyphIndexForCharacter(at: header)
+            let rect = layoutManager.boundingRect(forGlyphRange: NSRange(location: glyph, length: 1), in: container)
+            let origin = textView.textContainerOrigin
+            let location = textView.convert(NSPoint(x: origin.x + rect.midX, y: origin.y + rect.midY), to: nil)
+            func mouse(_ type: NSEvent.EventType) throws -> NSEvent {
+                try XCTUnwrap(NSEvent.mouseEvent(
+                    with: type, location: location, modifierFlags: [], timestamp: ProcessInfo.processInfo.systemUptime,
+                    windowNumber: harness.window.windowNumber, context: nil, eventNumber: 0, clickCount: 1, pressure: 1))
+            }
+            NSApp.postEvent(try mouse(.leftMouseUp), atStart: true)
+            textView.mouseDown(with: try mouse(.leftMouseDown))
+            spin(0.3)
+        }
+
+        try clickHeader()
+        XCTAssertTrue(textView.string.contains("▾ Document Info"), textView.string)
+        XCTAssertTrue(textView.string.contains("title: Rendering check"))
+        XCTAssertTrue(textView.string.contains("author: Hashlight"))
+
+        try clickHeader()
+        XCTAssertTrue(textView.string.contains("▸ Document Info"))
+        XCTAssertFalse(textView.string.contains("Rendering check"))
+        XCTAssertEqual(DocumentManager.shared.openDocuments.first?.content, source, "the document must not change")
+    }
+
+    @MainActor
     func testReloadingTheShownDocumentKeepsTheScrollPosition() throws {
         let restore = preserveDocumentState()
         defer { restore() }

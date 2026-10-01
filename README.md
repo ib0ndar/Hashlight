@@ -57,7 +57,7 @@ Open .md --> Rendered preview (reloads when the file changes) --> Export PDF/HTM
 - **LaTeX math** — inline `$...$` and block `$$...$$` via KaTeX
 - **Tables** — GitHub-flavored markdown tables with alignment and configurable column categories, matching words, priorities, and width weights
 - **Nested lists** — proper indentation with different bullet styles (•, ◦, ▪, ▹)
-- **YAML frontmatter** — displays document metadata from `---` blocks
+- **YAML frontmatter** — metadata from a leading `---` block is shown as a collapsed "Document Info" row listing its keys; click it to open
 - **Clickable links** — external URLs open in browser, relative `.md` links open as new tabs
 - **Task lists** — `- [ ]` / `- [x]` rendered as read-only checkboxes
 - **GitHub alerts** — `> [!NOTE]`, `[!TIP]`, `[!IMPORTANT]`, `[!WARNING]`, `[!CAUTION]` callouts (preview and every export)
@@ -96,7 +96,7 @@ Open .md --> Rendered preview (reloads when the file changes) --> Export PDF/HTM
 - **Focus mode** (`⌘⇧F`) — hides the sidebar, toolbar items, tabs, and status bar, centers content at 720px max; a floating (Liquid Glass) exit button appears on hover
 - **Status bar** — word count, character count, reading time, layout, zoom, detected encoding
 - **Zoom** — `⌘+` / `⌘−` / `⌘0`, pinch-to-zoom trackpad gesture
-- **Themes** — System / Light / Dark application appearance, with separate drop-down menus for the light and dark preview theme: a **System** theme built from macOS's own colors (text background, labels, separators, your accent color for headings and links), plus 102 light and 249 dark Base16 palettes
+- **Themes** — System / Light / Dark application appearance, with separate drop-down menus for the light and dark preview theme: a **System** theme (the default) built from macOS's own colors (text background, labels, separators, your accent color for headings and links), plus 102 light and 249 dark Base16 palettes
 - **Preview fonts** — independently select an installed proportional font for Markdown text and a monospaced font for code and commands
 - **Adaptive icon** — a Liquid Glass `#` lit by an amber spark; on macOS 26 it follows the system's icon style (Frost by default, Ember in dark, plus Clear and Tinted)
 - **Dock icon** — keep the system's choice or always show Frost or Ember in the Dock and app switcher (Settings → General)

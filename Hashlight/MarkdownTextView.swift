@@ -99,6 +99,11 @@ struct MarkdownTextView: NSViewRepresentable {
         // Store reference for coordinator
         context.coordinator.textView = textView
         context.coordinator.scrollView = scrollView
+        context.coordinator.lastParent = self
+        (textView as? PreviewTextView)?.onFrontmatterToggle = { [weak coordinator = context.coordinator, weak textView, weak scrollView] in
+            guard let coordinator, let textView, let scrollView else { return }
+            coordinator.toggleFrontmatter(textView: textView, scrollView: scrollView)
+        }
         context.coordinator.baseURL = baseURL
         context.coordinator.documentId = documentId
         context.coordinator.onScrollPositionChanged = onScrollPositionChanged
@@ -159,6 +164,7 @@ struct MarkdownTextView: NSViewRepresentable {
         // pass so the diagram-render filter always reflects what's CURRENTLY displayed, not
         // whichever document this pane showed when the NSView was first created (Plan 003).
         context.coordinator.documentId = documentId
+        context.coordinator.lastParent = self
 
         // Check if content changed
         let contentChanged = context.coordinator.lastContent != content
@@ -301,6 +307,10 @@ struct MarkdownTextView: NSViewRepresentable {
         // Element-level rendering cache for incremental updates
         var elementCache: [String: NSAttributedString] = [:]
         var lastZoomKey: String = ""
+        /// Documents whose frontmatter block is open; the default is collapsed.
+        var expandedFrontmatterDocuments: Set<UUID> = []
+        /// The representable as of the last update, for rebuilds the view asks for itself.
+        var lastParent: MarkdownTextView?
 
         // Scroll Y captured at the moment a diagram-render notification arrived. After the
         // rebuild lands, updateNSView restores to this exact Y — preserving the user's scroll
@@ -320,6 +330,18 @@ struct MarkdownTextView: NSViewRepresentable {
         /// firing later always rebuilds against the content that was current when it was
         /// (re)scheduled — each reload reschedules with the latest snapshot, so the final
         /// version is never dropped.
+        /// Opens or closes the current document's frontmatter block and rebuilds in place,
+        /// keeping the reader's scroll position.
+        func toggleFrontmatter(textView: NSTextView, scrollView: NSScrollView) {
+            guard let documentId, let parent = lastParent else { return }
+            if expandedFrontmatterDocuments.contains(documentId) {
+                expandedFrontmatterDocuments.remove(documentId)
+            } else {
+                expandedFrontmatterDocuments.insert(documentId)
+            }
+            performRebuild(for: parent, textView: textView, scrollView: scrollView, contentChanged: true, keepScrollPosition: true)
+        }
+
         func scheduleRebuild(for parent: MarkdownTextView, textView: NSTextView, scrollView: NSScrollView, contentChanged: Bool, isReload: Bool) {
             guard isReload else {
                 rebuildDebounceTimer?.invalidate()
@@ -767,6 +789,9 @@ struct MarkdownTextView: NSViewRepresentable {
         // are aligned — but we also track slug-counts here to handle duplicates defensively.
         var parsedHeadingIndex = 0
 
+        // Collapsed by default; the reader opens it from its header row (see appendFrontmatter).
+        let frontmatterExpanded = coordinator.documentId.map { coordinator.expandedFrontmatterDocuments.contains($0) } ?? false
+
         // Manage element cache — invalidate on zoom, font, width, or preview theme. Several
         // renderers bake resolved RGB into cached fragments, so the selected palette belongs in
         // the cache key even when the Markdown content itself did not change.
@@ -785,9 +810,11 @@ struct MarkdownTextView: NSViewRepresentable {
             // NOT be cached by content id: their first render inserts a "[Image: alt]" / "[Rendering…]"
             // placeholder, and caching that placeholder freezes the wrong visual even after the
             // diagramDidRender notification clears `elementCache`.
+            // Frontmatter is skipped too: its rendering depends on the toggle state, not only
+            // on its content.
             let skipCache: Bool
             switch element {
-            case .image, .mermaidBlock, .displayMath, .htmlBlock:
+            case .image, .mermaidBlock, .displayMath, .htmlBlock, .frontmatter:
                 skipCache = true
             default:
                 skipCache = false
@@ -797,7 +824,7 @@ struct MarkdownTextView: NSViewRepresentable {
             if !skipCache, cacheValid, let cached = coordinator.elementCache[element.id] {
                 result.append(cached)
             } else {
-                renderElement(element, to: result)
+                renderElement(element, to: result, frontmatterExpanded: frontmatterExpanded)
                 let endPos = result.length
                 if !skipCache, endPos > startPos {
                     let fragment = result.attributedSubstring(from: NSRange(location: startPos, length: endPos - startPos))
@@ -828,7 +855,7 @@ struct MarkdownTextView: NSViewRepresentable {
     }
 
     /// Dispatch a parsed element to the appropriate append method
-    private func renderElement(_ element: MarkdownParser.Element, to result: NSMutableAttributedString) {
+    private func renderElement(_ element: MarkdownParser.Element, to result: NSMutableAttributedString, frontmatterExpanded: Bool) {
         switch element {
         case .heading1(let text): appendHeading(text: text, level: 1, to: result)
         case .heading2(let text): appendHeading(text: text, level: 2, to: result)
@@ -837,7 +864,7 @@ struct MarkdownTextView: NSViewRepresentable {
         case .heading5(let text): appendHeading(text: text, level: 5, to: result)
         case .heading6(let text): appendHeading(text: text, level: 6, to: result)
         case .paragraph(let text): appendParagraph(text: text, to: result)
-        case .frontmatter(let lines): appendFrontmatter(lines: lines, to: result)
+        case .frontmatter(let lines): appendFrontmatter(lines: lines, expanded: frontmatterExpanded, to: result)
         case .list(let items): appendList(items: items, to: result)
         case .codeBlock(let code, let language): appendCodeBlock(code: code, language: language, to: result)
         case .mermaidBlock(let code): appendMermaidBlock(code: code, to: result)
@@ -981,7 +1008,7 @@ struct MarkdownTextView: NSViewRepresentable {
         }
     }
 
-    private func appendFrontmatter(lines: [String], to result: NSMutableAttributedString) {
+    private func appendFrontmatter(lines: [String], expanded: Bool, to result: NSMutableAttributedString) {
         guard !lines.isEmpty else { return }
 
         let titleFont = mainFont(size: 11 * zoomLevel).withWeight(.semibold)
@@ -992,35 +1019,54 @@ struct MarkdownTextView: NSViewRepresentable {
         paragraphStyle.paragraphSpacing = 2
         paragraphStyle.lineSpacing = 2
 
-        // Header
-        result.append(NSAttributedString(string: "DOCUMENT INFO\n", attributes: [
+        // Parse the key-value pairs once: the rows when expanded, the key list when collapsed.
+        let fields: [(key: String?, value: String)] = lines.compactMap { line in
+            let trimmed = line.trimmingCharacters(in: .whitespaces)
+            guard !trimmed.isEmpty else { return nil }
+            guard let colonIndex = trimmed.firstIndex(of: ":") else { return (nil, trimmed) }
+            let key = String(trimmed[..<colonIndex]).trimmingCharacters(in: .whitespaces)
+            let value = String(trimmed[trimmed.index(after: colonIndex)...]).trimmingCharacters(in: .whitespaces)
+            return (key, value)
+        }
+
+        // The header is a disclosure row: PreviewTextView toggles the block when it is clicked
+        // (frontmatterToggleKey) and the pointer shows a hand over it.
+        let header = NSMutableAttributedString(string: "\(expanded ? "▾" : "▸") Document Info", attributes: [
             .font: titleFont,
             .foregroundColor: theme.secondaryTextColor,
             .paragraphStyle: paragraphStyle
-        ]))
-
-        // Parse and display key-value pairs
-        for line in lines {
-            let trimmed = line.trimmingCharacters(in: .whitespaces)
-            guard !trimmed.isEmpty else { continue }
-
-            if let colonIndex = trimmed.firstIndex(of: ":") {
-                let key = String(trimmed[..<colonIndex]).trimmingCharacters(in: .whitespaces)
-                let value = String(trimmed[trimmed.index(after: colonIndex)...]).trimmingCharacters(in: .whitespaces)
-
-                result.append(NSAttributedString(string: "\(key): ", attributes: [
-                    .font: keyFont,
-                    .foregroundColor: theme.secondaryTextColor,
+        ])
+        if !expanded {
+            let keys = fields.compactMap(\.key).filter { !$0.isEmpty }
+            if !keys.isEmpty {
+                var summary = keys.joined(separator: ", ")
+                if summary.count > 60 {
+                    summary = String(summary.prefix(57)).trimmingCharacters(in: .whitespacesAndNewlines) + "…"
+                }
+                header.append(NSAttributedString(string: "   \(summary)", attributes: [
+                    .font: mainFont(size: 11 * zoomLevel),
+                    .foregroundColor: theme.commentColor,
                     .paragraphStyle: paragraphStyle
                 ]))
-                result.append(NSAttributedString(string: "\(value)\n", attributes: [
-                    .font: valueFont,
-                    .foregroundColor: theme.textColor,
-                    .paragraphStyle: paragraphStyle
-                ]))
-            } else {
-                // Line without colon, just display it
-                result.append(NSAttributedString(string: "\(trimmed)\n", attributes: [
+            }
+        }
+        header.addAttributes([
+            PreviewTextView.frontmatterToggleKey: expanded ? "expanded" : "collapsed",
+            .cursor: NSCursor.pointingHand
+        ], range: NSRange(location: 0, length: header.length))
+        header.append(NSAttributedString(string: "\n", attributes: [.font: titleFont, .paragraphStyle: paragraphStyle]))
+        result.append(header)
+
+        if expanded {
+            for field in fields {
+                if let key = field.key {
+                    result.append(NSAttributedString(string: "\(key): ", attributes: [
+                        .font: keyFont,
+                        .foregroundColor: theme.secondaryTextColor,
+                        .paragraphStyle: paragraphStyle
+                    ]))
+                }
+                result.append(NSAttributedString(string: "\(field.value)\n", attributes: [
                     .font: valueFont,
                     .foregroundColor: theme.textColor,
                     .paragraphStyle: paragraphStyle
@@ -1891,6 +1937,37 @@ final class PreviewTextView: NSTextView {
 
     nonisolated static let codeBlockKey = NSAttributedString.Key("Hashlight.codeBlock")
     nonisolated static let tableKey = NSAttributedString.Key("Hashlight.table")
+    /// Marks the frontmatter block's header row; a click on that row toggles the block.
+    nonisolated static let frontmatterToggleKey = NSAttributedString.Key("Hashlight.frontmatterToggle")
+
+    var onFrontmatterToggle: (() -> Void)?
+
+    /// A click on the frontmatter header row toggles the block instead of moving the
+    /// insertion point or starting a selection.
+    override func mouseDown(with event: NSEvent) {
+        if event.clickCount == 1, isOnFrontmatterToggle(convert(event.locationInWindow, from: nil)) {
+            onFrontmatterToggle?()
+            return
+        }
+        super.mouseDown(with: event)
+    }
+
+    /// Whether `point` (view coordinates) lies on the line of the frontmatter header row.
+    private func isOnFrontmatterToggle(_ point: NSPoint) -> Bool {
+        guard let layoutManager, let textContainer, let storage = textStorage, storage.length > 0 else { return false }
+        let origin = textContainerOrigin
+        let probe = NSPoint(
+            x: min(max(point.x - origin.x, 1), max(1, textContainer.containerSize.width - 1)),
+            y: point.y - origin.y
+        )
+        let glyph = layoutManager.glyphIndex(for: probe, in: textContainer)
+        let charIndex = layoutManager.characterIndexForGlyph(at: glyph)
+        guard charIndex < storage.length,
+              storage.attribute(Self.frontmatterToggleKey, at: charIndex, effectiveRange: nil) != nil else { return false }
+        // glyphIndex(for:) returns the nearest glyph even for points outside all text.
+        let line = layoutManager.lineFragmentRect(forGlyphAt: glyph, effectiveRange: nil).offsetBy(dx: origin.x, dy: origin.y)
+        return point.y >= line.minY && point.y <= line.maxY
+    }
 
     private var hoverTrackingArea: NSTrackingArea?
     private var hoveredCodeBlock: CodeBlockPayload?
