@@ -165,8 +165,11 @@ struct MarkdownTextView: NSViewRepresentable {
 
         let desiredInsets = NSSize(width: pageMargin.points, height: 40)
         if textView.textContainerInset != desiredInsets {
-            textView.textContainerInset = desiredInsets
-            (textView as? PreviewTextView)?.updateColumnWidthForCurrentInsets()
+            if let preview = textView as? PreviewTextView {
+                preview.setTextContainerInsetKeepingReadingPosition(desiredInsets)
+            } else {
+                textView.textContainerInset = desiredInsets
+            }
         }
 
         // Cheap: the setter no-ops when unchanged, and a change only invalidates the container
@@ -1982,18 +1985,9 @@ final class PreviewTextView: NSTextView {
         didSet {
             guard oldValue != preferredColumnWidth else { return }
             // A settings change reflows every line, so a raw scroll offset would land on
-            // different text. Pin the first visible character instead. (Resizes skip this —
-            // they take the cheap path and behave like any wrapping text view.)
-            let anchor = firstVisibleCharacterIndex()
-            updateColumnWidth()
-            // Deferred: this setter runs INSIDE updateNSView, and scrolling fires the
-            // bounds-change observer synchronously; nothing may react to that during the
-            // SwiftUI update pass (the hazard reportMatchCount defers around).
-            if let anchor {
-                Task { @MainActor [weak self] in
-                    self?.scrollCharacterToTop(anchor)
-                }
-            }
+            // different text. (Resizes skip this — they take the cheap path and behave like
+            // any wrapping text view; see viewDidEndLiveResize.)
+            keepingReadingPosition { updateColumnWidth() }
         }
     }
 
@@ -2028,36 +2022,73 @@ final class PreviewTextView: NSTextView {
         needsDisplay = true
     }
 
-    func updateColumnWidthForCurrentInsets() {
-        let anchor = firstVisibleCharacterIndex()
-        updateColumnWidth()
+    /// Page Margin sets the horizontal inset, which reflows the column like a Content Width
+    /// change; the reader's place is kept the same way.
+    func setTextContainerInsetKeepingReadingPosition(_ inset: NSSize) {
+        guard inset != textContainerInset else { return }
+        keepingReadingPosition {
+            textContainerInset = inset
+            updateColumnWidth()
+        }
+    }
+
+    /// The reader's place: the character at the top of the viewport and how far below the top
+    /// of that character's line fragment the viewport's top edge lies.
+    private struct ReadingAnchor {
+        let characterIndex: Int
+        let offset: CGFloat
+        let fragmentHeight: CGFloat
+    }
+
+    /// Runs a change that reflows the column, then puts the reader back at the same place.
+    /// The restore is deferred: callers run inside updateNSView, and scrolling fires the
+    /// bounds-change observer synchronously; nothing may react to that during the SwiftUI update
+    /// pass (the hazard reportMatchCount defers around). A Content Width change also rebuilds the
+    /// text in that pass; the same content keeps its character indices, so the anchor still holds.
+    private func keepingReadingPosition(_ change: () -> Void) {
+        let anchor = readingAnchor()
+        change()
         if let anchor {
             Task { @MainActor [weak self] in
-                self?.scrollCharacterToTop(anchor)
+                self?.restoreReadingPosition(anchor)
             }
         }
     }
 
-    private func firstVisibleCharacterIndex() -> Int? {
+    private func readingAnchor() -> ReadingAnchor? {
         guard let layoutManager, let textContainer, let storage = textStorage, storage.length > 0,
               enclosingScrollView != nil else { return nil }
-        let origin = textContainerOrigin
-        let point = NSPoint(x: 1, y: max(0, visibleRect.minY - origin.y) + 1)
-        let glyph = layoutManager.glyphIndex(for: point, in: textContainer)
-        return layoutManager.characterIndexForGlyph(at: glyph)
+        let top = visibleRect.minY - textContainerOrigin.y
+        let glyph = layoutManager.glyphIndex(for: NSPoint(x: 1, y: max(0, top) + 1), in: textContainer)
+        let fragment = layoutManager.lineFragmentRect(forGlyphAt: glyph, effectiveRange: nil)
+        return ReadingAnchor(
+            characterIndex: layoutManager.characterIndexForGlyph(at: glyph),
+            offset: top - fragment.minY,
+            fragmentHeight: fragment.height
+        )
     }
 
-    private func scrollCharacterToTop(_ index: Int) {
+    /// Pure math (unit-tested): where the viewport's top edge goes once the anchor's line
+    /// fragment has moved or changed height. Inside the fragment the offset scales with it, so
+    /// a rescaled image keeps the same part at the top; outside it (the top inset, or space below
+    /// a short table cell) the offset is kept as it was.
+    nonisolated static func anchoredTop(offset: CGFloat, fragmentHeight: CGFloat, newFragment: NSRect) -> CGFloat {
+        guard fragmentHeight > 0, offset >= 0, offset <= fragmentHeight else { return newFragment.minY + offset }
+        return newFragment.minY + offset / fragmentHeight * newFragment.height
+    }
+
+    private func restoreReadingPosition(_ anchor: ReadingAnchor) {
         guard let layoutManager, let textContainer, let scrollView = enclosingScrollView,
-              let storage = textStorage, index < storage.length else { return }
+              let storage = textStorage, anchor.characterIndex < storage.length else { return }
         // One-off full layout (settings change only): the view's height is stale until the
         // reflow completes, and the clamp below needs the real one.
         layoutManager.ensureLayout(for: textContainer)
         sizeToFit()
-        let glyphRange = layoutManager.glyphRange(forCharacterRange: NSRange(location: index, length: 1), actualCharacterRange: nil)
-        let rect = layoutManager.boundingRect(forGlyphRange: glyphRange, in: textContainer)
+        let glyph = layoutManager.glyphIndexForCharacter(at: anchor.characterIndex)
+        let fragment = layoutManager.lineFragmentRect(forGlyphAt: glyph, effectiveRange: nil)
+        let top = Self.anchoredTop(offset: anchor.offset, fragmentHeight: anchor.fragmentHeight, newFragment: fragment)
         let maxY = max(0, frame.height - scrollView.contentView.bounds.height)
-        let y = min(max(0, rect.minY + textContainerOrigin.y), maxY)
+        let y = min(max(0, top + textContainerOrigin.y), maxY)
         scrollView.contentView.setBoundsOrigin(NSPoint(x: 0, y: y))
         scrollView.reflectScrolledClipView(scrollView.contentView)
     }
@@ -2279,6 +2310,24 @@ final class PreviewTextView: NSTextView {
     override func setFrameSize(_ newSize: NSSize) {
         super.setFrameSize(newSize)
         updateColumnWidth()
+    }
+
+    /// When a live resize ends, NSTextView scrolls the top of the first line fragment in view
+    /// back to the top of the viewport (`-_setFrameSize:forceScroll:`). An image or diagram is a
+    /// single fragment, so letting go of the window's edge jumped up to its top. Keep the
+    /// position the reader saw while resizing.
+    override func viewDidEndLiveResize() {
+        guard let scrollView = enclosingScrollView else {
+            super.viewDidEndLiveResize()
+            return
+        }
+        let clipView = scrollView.contentView
+        let origin = clipView.bounds.origin
+        super.viewDidEndLiveResize()
+        guard clipView.bounds.origin != origin else { return }
+        let kept = clipView.constrainBoundsRect(NSRect(origin: origin, size: clipView.bounds.size))
+        clipView.setBoundsOrigin(kept.origin)
+        scrollView.reflectScrolledClipView(clipView)
     }
 
     /// Pure placement math (unit-tested). The inset is a MINIMUM margin on both sides: when

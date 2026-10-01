@@ -564,6 +564,19 @@ nonisolated final class ContentWidthTests: XCTestCase {
         XCTAssertEqual(PreviewTextView.columnWidth(preferred: 800, viewWidth: 120, inset: 50), 200)
     }
 
+    /// The viewport's top edge after a reflow, from its offset into the anchor's line fragment.
+    func testReadingAnchorScalesWithinItsFragmentAndKeepsOtherOffsets() {
+        // Halfway down a 645 pt image that is now 495 pt tall at y = 1000: still halfway down.
+        let image = NSRect(x: 0, y: 1000, width: 660, height: 495)
+        XCTAssertEqual(PreviewTextView.anchoredTop(offset: 322.5, fragmentHeight: 645, newFragment: image), 1247.5)
+        // A line of prose that moved but kept its height keeps the exact offset.
+        let line = NSRect(x: 0, y: 300, width: 700, height: 24)
+        XCTAssertEqual(PreviewTextView.anchoredTop(offset: 10, fragmentHeight: 24, newFragment: line), 310)
+        // Above the first line (the top inset) and below a short table cell: kept as is.
+        XCTAssertEqual(PreviewTextView.anchoredTop(offset: -40, fragmentHeight: 24, newFragment: line), 260)
+        XCTAssertEqual(PreviewTextView.anchoredTop(offset: 60, fragmentHeight: 24, newFragment: line), 360)
+    }
+
     /// End-to-end against the real view, reproducing the original bug's exact geometry.
     @MainActor
     func testTextIsNotClippedInAFocusModeWidthPane() throws {
@@ -1005,6 +1018,156 @@ nonisolated final class PreviewBehaviorTests: XCTestCase {
         spin(0.2)
 
         XCTAssertEqual(scrollView.contentView.bounds.origin.y, 900, accuracy: 1)
+    }
+
+    /// Shows prose, a 1200 × 900 pt image, and more prose in a harness wide enough for every
+    /// Content Width preset. Returns the harness and the image's character index.
+    @MainActor
+    private func showDocumentWithTallImage(in directory: URL) throws -> (PreviewHarness, Int) {
+        let imageURL = directory.appendingPathComponent("tall.png")
+        let bitmap = try XCTUnwrap(NSBitmapImageRep(
+            bitmapDataPlanes: nil, pixelsWide: 1200, pixelsHigh: 900, bitsPerSample: 8, samplesPerPixel: 4,
+            hasAlpha: true, isPlanar: false, colorSpaceName: .deviceRGB, bytesPerRow: 0, bitsPerPixel: 0))
+        try XCTUnwrap(bitmap.representation(using: .png, properties: [:])).write(to: imageURL)
+        let prose = "This paragraph has enough words in it to wrap across the text column more than once, "
+            + "so a narrower or wider column moves everything below it. "
+        func paragraphs(_ count: Int) -> String {
+            (1...count).map { "\($0). " + prose + prose }.joined(separator: "\n\n")
+        }
+        let source = "# Image\n\n\(paragraphs(6))\n\n![Tall](\(imageURL.path))\n\n\(paragraphs(14))\n\nClosing paragraph.\n"
+        _ = show(source, at: directory.appendingPathComponent("image.md"))
+
+        let harness = PreviewHarness()
+        harness.window.setContentSize(NSSize(width: 1400, height: 700))
+        waitUntil("the document renders", in: harness) { harness.textView?.string.contains("Closing paragraph") == true }
+        // The first render positions the document on the next main-queue turn; let it land.
+        spin(0.2)
+        let textView = try XCTUnwrap(harness.textView)
+        let imageIndex = (textView.string as NSString).range(of: "\u{FFFC}").location
+        XCTAssertNotEqual(imageIndex, NSNotFound, "the image renders as an attachment")
+        return (harness, imageIndex)
+    }
+
+    /// The line fragment holding the image, in the text view's coordinates.
+    @MainActor
+    private func imageFragment(_ index: Int, in textView: NSTextView) throws -> NSRect {
+        let layoutManager = try XCTUnwrap(textView.layoutManager)
+        layoutManager.ensureLayout(for: try XCTUnwrap(textView.textContainer))
+        let glyph = layoutManager.glyphIndexForCharacter(at: index)
+        let origin = textView.textContainerOrigin
+        return layoutManager.lineFragmentRect(forGlyphAt: glyph, effectiveRange: nil).offsetBy(dx: origin.x, dy: origin.y)
+    }
+
+    @MainActor
+    private func makeTemporaryDirectory() throws -> URL {
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("hashlight-anchor-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        return directory
+    }
+
+    /// Returns a closure that restores the Content Width and Page Margin settings.
+    @MainActor
+    private func preserveLayoutSettings() -> () -> Void {
+        let settings = SettingsManager.shared
+        let width = settings.contentWidth
+        let margin = settings.pageMargin
+        return {
+            settings.contentWidth = width
+            settings.pageMargin = margin
+        }
+    }
+
+    /// Letting go of the window's edge keeps the position the reader saw while resizing.
+    /// NSTextView scrolls the top of the first line fragment in view back to the top when a live
+    /// resize ends; with an image there, the preview jumped up to the image's top.
+    @MainActor
+    func testEndingALiveResizeInsideAnImageKeepsTheScrollPosition() throws {
+        let restore = preserveDocumentState()
+        defer { restore() }
+        let restoreSettings = preserveLayoutSettings()
+        defer { restoreSettings() }
+        SettingsManager.shared.contentWidth = .medium
+        SettingsManager.shared.pageMargin = .normal
+        let directory = try makeTemporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let (harness, imageIndex) = try showDocumentWithTallImage(in: directory)
+        let textView = try XCTUnwrap(harness.textView)
+        let scrollView = try XCTUnwrap(textView.enclosingScrollView)
+        let image = try imageFragment(imageIndex, in: textView)
+        scrollView.contentView.scroll(to: NSPoint(x: 0, y: image.minY + image.height / 2))
+        scrollView.reflectScrolledClipView(scrollView.contentView)
+
+        // What a drag on the window's corner sends the view: start, new size, end.
+        textView.viewWillStartLiveResize()
+        harness.window.setContentSize(NSSize(width: 1000, height: 600))
+        harness.hostingView.layoutSubtreeIfNeeded()
+        let resized = scrollView.contentView.bounds.origin.y
+        XCTAssertGreaterThan(resized, try imageFragment(imageIndex, in: textView).minY + 100,
+                             "sanity: the top of the viewport is still inside the image")
+        textView.viewDidEndLiveResize()
+
+        XCTAssertEqual(scrollView.contentView.bounds.origin.y, resized, accuracy: 0.5)
+    }
+
+    /// A Content Width change reflows the column and rescales images. A reader halfway down an
+    /// image stays halfway down it (the preview used to jump to the image's top).
+    @MainActor
+    func testChangingContentWidthKeepsTheReaderInsideAnImage() throws {
+        let restore = preserveDocumentState()
+        defer { restore() }
+        let restoreSettings = preserveLayoutSettings()
+        defer { restoreSettings() }
+        let settings = SettingsManager.shared
+        settings.contentWidth = .medium
+        settings.pageMargin = .normal
+        let directory = try makeTemporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let (harness, imageIndex) = try showDocumentWithTallImage(in: directory)
+        let textView = try XCTUnwrap(harness.textView)
+        let scrollView = try XCTUnwrap(textView.enclosingScrollView)
+        let before = try imageFragment(imageIndex, in: textView)
+        scrollView.contentView.scroll(to: NSPoint(x: 0, y: before.minY + before.height / 2))
+        scrollView.reflectScrolledClipView(scrollView.contentView)
+
+        settings.contentWidth = .narrow
+        waitUntil("the image is rebuilt at the Narrow width", in: harness) {
+            ((try? self.imageFragment(imageIndex, in: textView).height) ?? before.height) < before.height - 100
+        }
+        spin(0.2)
+
+        let after = try imageFragment(imageIndex, in: textView)
+        XCTAssertEqual((scrollView.contentView.bounds.origin.y - after.minY) / after.height, 0.5, accuracy: 0.01)
+    }
+
+    /// A Page Margin change reflows the column without a rebuild; the reader keeps their place
+    /// inside an image.
+    @MainActor
+    func testChangingPageMarginKeepsTheReaderInsideAnImage() throws {
+        let restore = preserveDocumentState()
+        defer { restore() }
+        let restoreSettings = preserveLayoutSettings()
+        defer { restoreSettings() }
+        let settings = SettingsManager.shared
+        settings.contentWidth = .full
+        settings.pageMargin = .normal
+        let directory = try makeTemporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let (harness, imageIndex) = try showDocumentWithTallImage(in: directory)
+        let textView = try XCTUnwrap(harness.textView)
+        let scrollView = try XCTUnwrap(textView.enclosingScrollView)
+        let before = try imageFragment(imageIndex, in: textView)
+        scrollView.contentView.scroll(to: NSPoint(x: 0, y: before.minY + 450))
+        scrollView.reflectScrolledClipView(scrollView.contentView)
+
+        settings.pageMargin = .comfortable
+        waitUntil("the wider margin reaches the preview", in: harness) {
+            textView.textContainerInset.width == SettingsManager.PageMargin.comfortable.points
+        }
+        spin(0.2)
+
+        let after = try imageFragment(imageIndex, in: textView)
+        XCTAssertEqual(scrollView.contentView.bounds.origin.y - after.minY, 450, accuracy: 1)
     }
 
     /// Find searches the rendered text, and a folder-search hit — which comes from the source —
