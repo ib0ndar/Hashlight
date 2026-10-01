@@ -28,9 +28,8 @@ your Markdown: there is no editor, no saving, and nothing to confirm when you cl
 It's a native SwiftUI app built around Apple's `NSTextView` rather than a web view — no
 Electron, no Tauri.
 
-Hashlight grew out of [zMD](https://github.com/umzcio/zMD) by Zachary Rossmiller, by way of zMD
-Viewer, a read-only edition of [the ib0ndar/zMD fork](https://github.com/ib0ndar/zMD). It keeps
-zMD's renderer, navigation, and exports; the editor, the updater, and zMD's history stay behind.
+Hashlight grew out of [zMD](https://github.com/umzcio/zMD) by Zachary Rossmiller. It keeps zMD's
+renderer, navigation, and exports; the editor and the updater stay behind.
 
 ---
 
@@ -154,9 +153,8 @@ Settings → Privacy & Security → Open Anyway).
 
 ### Next to zMD
 
-Hashlight (`io.github.ib0ndar.hashlight`) has its own settings and imports nothing from zMD or zMD
-Viewer. With more than one of them installed, each offers to open Markdown files and each ships a
-Quick Look extension. Finder uses one Markdown Quick Look extension at a time; switch it in System
+Hashlight (`io.github.ib0ndar.hashlight`) has its own settings and imports nothing from zMD. With
+both installed, each offers to open Markdown files and each ships a Quick Look extension. Finder uses one Markdown Quick Look extension at a time; switch it in System
 Settings → General → Login Items & Extensions → Quick Look.
 
 ---
