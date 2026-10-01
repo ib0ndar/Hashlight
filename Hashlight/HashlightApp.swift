@@ -70,90 +70,94 @@ struct HashlightApp: App {
                 }
             }
 
-            // Keep ⌘W reserved for Close Tab. SwiftUI places the native Close command in
-            // `saveItem`; replacing that group removes its duplicate ⌘W binding while the
-            // red titlebar button continues to use the NSWindow close delegate below. A viewer
-            // has nothing to save, so the group holds Open File Location (an empty group would
-            // leave two adjacent separators in the File menu).
-            CommandGroup(replacing: .saveItem) {
-                Button("Open File Location") {
-                    if let document = documentManager.selectedDocument {
-                        documentManager.revealInFinder(document: document)
+            // The File menu's groups share one Group: Xcode 26.6's CommandsBuilder accepts at
+            // most ten entries per block (Xcode 27 has no limit), and CI builds with 26.6.
+            Group {
+                // Keep ⌘W reserved for Close Tab. SwiftUI places the native Close command in
+                // `saveItem`; replacing that group removes its duplicate ⌘W binding while the
+                // red titlebar button continues to use the NSWindow close delegate below. A viewer
+                // has nothing to save, so the group holds Open File Location (an empty group would
+                // leave two adjacent separators in the File menu).
+                CommandGroup(replacing: .saveItem) {
+                    Button("Open File Location") {
+                        if let document = documentManager.selectedDocument {
+                            documentManager.revealInFinder(document: document)
+                        }
                     }
+                    .disabled(documentManager.openDocuments.isEmpty)
                 }
-                .disabled(documentManager.openDocuments.isEmpty)
-            }
 
-            CommandGroup(replacing: .appTermination) {
-                Button("Quit Hashlight") {
-                    NSApplication.shared.terminate(nil)
+                CommandGroup(replacing: .appTermination) {
+                    Button("Quit Hashlight") {
+                        NSApplication.shared.terminate(nil)
+                    }
+                    .keyboardShortcut("q", modifiers: .command)
                 }
-                .keyboardShortcut("q", modifiers: .command)
-            }
 
-            CommandGroup(replacing: .newItem) {
-                // macOS 27 shows menu icons only for key actions; Open is one.
-                Button {
-                    documentManager.openFile()
-                } label: {
-                    Label("Open...", systemImage: "folder")
-                        .labelStyle(.titleAndIcon)
-                }
-                .keyboardShortcut("o", modifiers: .command)
+                CommandGroup(replacing: .newItem) {
+                    // macOS 27 shows menu icons only for key actions; Open is one.
+                    Button {
+                        documentManager.openFile()
+                    } label: {
+                        Label("Open...", systemImage: "folder")
+                            .labelStyle(.titleAndIcon)
+                    }
+                    .keyboardShortcut("o", modifiers: .command)
 
-                Button("Quick Open...") {
-                    NotificationCenter.default.post(name: .showQuickOpen, object: nil)
-                }
-                .keyboardShortcut("o", modifiers: [.command, .shift])
+                    Button("Quick Open...") {
+                        NotificationCenter.default.post(name: .showQuickOpen, object: nil)
+                    }
+                    .keyboardShortcut("o", modifiers: [.command, .shift])
 
-                // ⌘⇧F is Focus Mode, so folder search takes ⌃⇧F.
-                Button("Search in Folder...") {
-                    NotificationCenter.default.post(name: .showFolderSearch, object: nil)
-                }
-                .keyboardShortcut("f", modifiers: [.control, .shift])
+                    // ⌘⇧F is Focus Mode, so folder search takes ⌃⇧F.
+                    Button("Search in Folder...") {
+                        NotificationCenter.default.post(name: .showFolderSearch, object: nil)
+                    }
+                    .keyboardShortcut("f", modifiers: [.control, .shift])
 
-                Button {
-                    folderManager.openFolder()
-                } label: {
-                    Label("Open Folder...", systemImage: "text.below.folder")
-                }
-                .keyboardShortcut("o", modifiers: [.command, .option])
+                    Button {
+                        folderManager.openFolder()
+                    } label: {
+                        Label("Open Folder...", systemImage: "text.below.folder")
+                    }
+                    .keyboardShortcut("o", modifiers: [.command, .option])
 
-                Button("Close Folder") {
-                    folderManager.closeFolder()
-                }
-                .disabled(folderManager.folderURL == nil)
+                    Button("Close Folder") {
+                        folderManager.closeFolder()
+                    }
+                    .disabled(folderManager.folderURL == nil)
 
-                Menu("Open Recent") {
-                    if documentManager.recentFileURLs.isEmpty {
-                        Text("No Recent Files")
-                            .disabled(true)
-                    } else {
-                        ForEach(documentManager.recentFileURLs, id: \.self) { url in
-                            Button(url.lastPathComponent) {
-                                documentManager.loadDocument(from: url)
+                    Menu("Open Recent") {
+                        if documentManager.recentFileURLs.isEmpty {
+                            Text("No Recent Files")
+                                .disabled(true)
+                        } else {
+                            ForEach(documentManager.recentFileURLs, id: \.self) { url in
+                                Button(url.lastPathComponent) {
+                                    documentManager.loadDocument(from: url)
+                                }
+                            }
+
+                            Divider()
+
+                            Button("Clear Items") {
+                                documentManager.clearRecentFiles()
                             }
                         }
-
-                        Divider()
-
-                        Button("Clear Items") {
-                            documentManager.clearRecentFiles()
-                        }
                     }
                 }
-            }
 
-            CommandGroup(replacing: .printItem) {
-                PrintMenuItem(documentManager: documentManager)
-                    .keyboardShortcut("p", modifiers: .command)
-            }
+                CommandGroup(replacing: .printItem) {
+                    PrintMenuItem(documentManager: documentManager)
+                        .keyboardShortcut("p", modifiers: .command)
+                }
 
-            CommandGroup(after: .importExport) {
-                Menu {
-                    ExportMenuItems(documentManager: documentManager)
-                } label: {
-                    Label("Export", systemImage: "square.and.arrow.up")
+                CommandGroup(after: .importExport) {
+                    Menu {
+                        ExportMenuItems(documentManager: documentManager)
+                    } label: {
+                        Label("Export", systemImage: "square.and.arrow.up")
+                    }
                 }
             }
 
