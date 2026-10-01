@@ -57,7 +57,7 @@ Open .md --> Rendered preview (reloads when the file changes) --> Export PDF/HTM
 - **LaTeX math** — inline `$...$` and block `$$...$$` via KaTeX
 - **Tables** — GitHub-flavored markdown tables with alignment and configurable column categories, matching words, priorities, and width weights
 - **Nested lists** — proper indentation with different bullet styles (•, ◦, ▪, ▹)
-- **YAML frontmatter** — metadata from a leading `---` block is shown as a collapsed "Document Info" row listing its keys; click it to open
+- **YAML frontmatter** — a leading `---` block folds into one row labelled with its `title` (or "Document Info" and the key names when there is none); click the row to show the other fields
 - **Clickable links** — external URLs open in browser, relative `.md` links open as new tabs
 - **Task lists** — `- [ ]` / `- [x]` rendered as read-only checkboxes
 - **GitHub alerts** — `> [!NOTE]`, `[!TIP]`, `[!IMPORTANT]`, `[!WARNING]`, `[!CAUTION]` callouts (preview and every export)

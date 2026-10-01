@@ -644,7 +644,7 @@ nonisolated final class PreviewBehaviorTests: XCTestCase {
     func testFrontmatterStartsCollapsedAndOpensFromItsHeader() throws {
         let restore = preserveDocumentState()
         defer { restore() }
-        let source = "---\ntitle: Rendering check\nauthor: Hashlight\n---\n\n# Body\n"
+        let source = "---\ntitle: \"Rendering check\"\nauthor: Hashlight\n---\n\n# Body\n"
         let url = FileManager.default.temporaryDirectory.appendingPathComponent("hashlight-frontmatter-\(UUID().uuidString).md")
         _ = show(source, at: url)
 
@@ -652,16 +652,17 @@ nonisolated final class PreviewBehaviorTests: XCTestCase {
         waitUntil("the document renders", in: harness) { harness.textView?.string.contains("Body") == true }
         let textView = try XCTUnwrap(harness.textView)
 
-        // Collapsed by default: the header names the keys, the values are not shown.
-        XCTAssertTrue(textView.string.contains("▸ Document Info"), textView.string)
-        XCTAssertTrue(textView.string.contains("title, author"))
-        XCTAssertFalse(textView.string.contains("Rendering check"))
+        // Collapsed by default, labelled with the document's title (unquoted); the other
+        // fields are hidden.
+        XCTAssertTrue(textView.string.contains("▸ Rendering check\n"), textView.string)
+        XCTAssertFalse(textView.string.contains("Document Info"))
+        XCTAssertFalse(textView.string.contains("author"))
 
         func clickHeader() throws {
             let layoutManager = try XCTUnwrap(textView.layoutManager)
             let container = try XCTUnwrap(textView.textContainer)
             layoutManager.ensureLayout(for: container)
-            let header = (textView.string as NSString).range(of: "Document Info").location
+            let header = (textView.string as NSString).range(of: "Rendering check").location
             let glyph = layoutManager.glyphIndexForCharacter(at: header)
             let rect = layoutManager.boundingRect(forGlyphRange: NSRange(location: glyph, length: 1), in: container)
             let origin = textView.textContainerOrigin
@@ -676,15 +677,39 @@ nonisolated final class PreviewBehaviorTests: XCTestCase {
             spin(0.3)
         }
 
+        // Expanded: the title stays in the header and does not repeat as a row.
         try clickHeader()
-        XCTAssertTrue(textView.string.contains("▾ Document Info"), textView.string)
-        XCTAssertTrue(textView.string.contains("title: Rendering check"))
+        XCTAssertTrue(textView.string.contains("▾ Rendering check\n"), textView.string)
         XCTAssertTrue(textView.string.contains("author: Hashlight"))
+        XCTAssertFalse(textView.string.contains("title:"))
 
         try clickHeader()
-        XCTAssertTrue(textView.string.contains("▸ Document Info"))
-        XCTAssertFalse(textView.string.contains("Rendering check"))
+        XCTAssertTrue(textView.string.contains("▸ Rendering check\n"))
+        XCTAssertFalse(textView.string.contains("author"))
         XCTAssertEqual(DocumentManager.shared.openDocuments.first?.content, source, "the document must not change")
+    }
+
+    @MainActor
+    func testFrontmatterWithoutATitleUsesAGenericLabelAndListsTheKeys() throws {
+        let restore = preserveDocumentState()
+        defer { restore() }
+        let source = "---\nauthor: Hashlight\ntags: a, b\n---\n\n# Body\n"
+        let url = FileManager.default.temporaryDirectory.appendingPathComponent("hashlight-frontmatter-\(UUID().uuidString).md")
+        _ = show(source, at: url)
+
+        let harness = PreviewHarness()
+        waitUntil("the document renders", in: harness) { harness.textView?.string.contains("Body") == true }
+        let textView = try XCTUnwrap(harness.textView)
+        XCTAssertTrue(textView.string.contains("▸ Document Info   author, tags\n"), textView.string)
+        XCTAssertFalse(textView.string.contains("Hashlight\n"))
+    }
+
+    func testYAMLScalarsLoseMatchingQuotesOnly() {
+        XCTAssertEqual(MarkdownTextView.unquotedYAMLScalar("\"Rendering check\""), "Rendering check")
+        XCTAssertEqual(MarkdownTextView.unquotedYAMLScalar("'single'"), "single")
+        XCTAssertEqual(MarkdownTextView.unquotedYAMLScalar("  plain  "), "plain")
+        XCTAssertEqual(MarkdownTextView.unquotedYAMLScalar("\"mismatched'"), "\"mismatched'")
+        XCTAssertEqual(MarkdownTextView.unquotedYAMLScalar("\""), "\"")
     }
 
     @MainActor

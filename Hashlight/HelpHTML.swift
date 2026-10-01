@@ -154,7 +154,7 @@ enum HelpHTML {
             <li>Mermaid diagrams and LaTeX math</li>
             <li>GitHub alerts such as <code>&gt; [!NOTE]</code></li>
             <li>Horizontal rules</li>
-            <li>YAML frontmatter, shown as a collapsed "Document Info" row at the top; click it to see the values</li>
+            <li>YAML frontmatter, folded into one row at the top labelled with the <code>title</code> field (or "Document Info" when there is none); click the row to show the other fields</li>
         </ul>
 
         <h2>Tips</h2>

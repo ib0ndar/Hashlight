@@ -1011,7 +1011,8 @@ struct MarkdownTextView: NSViewRepresentable {
     private func appendFrontmatter(lines: [String], expanded: Bool, to result: NSMutableAttributedString) {
         guard !lines.isEmpty else { return }
 
-        let titleFont = mainFont(size: 11 * zoomLevel).withWeight(.semibold)
+        let labelFont = mainFont(size: 11 * zoomLevel).withWeight(.semibold)
+        let titleFont = mainFont(size: 13 * zoomLevel).withWeight(.semibold)
         let keyFont = mainFont(size: 12 * zoomLevel).withWeight(.medium)
         let valueFont = mainFont(size: 12 * zoomLevel)
 
@@ -1019,8 +1020,8 @@ struct MarkdownTextView: NSViewRepresentable {
         paragraphStyle.paragraphSpacing = 2
         paragraphStyle.lineSpacing = 2
 
-        // Parse the key-value pairs once: the rows when expanded, the key list when collapsed.
-        let fields: [(key: String?, value: String)] = lines.compactMap { line in
+        // Parse the key-value pairs once.
+        var fields: [(key: String?, value: String)] = lines.compactMap { line in
             let trimmed = line.trimmingCharacters(in: .whitespaces)
             guard !trimmed.isEmpty else { return nil }
             guard let colonIndex = trimmed.firstIndex(of: ":") else { return (nil, trimmed) }
@@ -1029,16 +1030,36 @@ struct MarkdownTextView: NSViewRepresentable {
             return (key, value)
         }
 
+        // The disclosure label is the document's title when the frontmatter has one (that row
+        // then moves into the header); otherwise a generic label plus, while collapsed, the
+        // list of keys.
+        let titleIndex = fields.firstIndex { $0.key?.lowercased() == "title" && !Self.unquotedYAMLScalar($0.value).isEmpty }
+        let title = titleIndex.map { Self.unquotedYAMLScalar(fields[$0].value) }
+        if let titleIndex {
+            fields.remove(at: titleIndex)
+        }
+
         // The header is a disclosure row: PreviewTextView toggles the block when it is clicked
         // (frontmatterToggleKey) and the pointer shows a hand over it.
-        let header = NSMutableAttributedString(string: "\(expanded ? "▾" : "▸") Document Info", attributes: [
-            .font: titleFont,
+        let header = NSMutableAttributedString(string: expanded ? "▾ " : "▸ ", attributes: [
+            .font: labelFont,
             .foregroundColor: theme.secondaryTextColor,
             .paragraphStyle: paragraphStyle
         ])
-        if !expanded {
+        if let title {
+            header.append(NSAttributedString(string: title, attributes: [
+                .font: titleFont,
+                .foregroundColor: theme.textColor,
+                .paragraphStyle: paragraphStyle
+            ]))
+        } else {
+            header.append(NSAttributedString(string: "Document Info", attributes: [
+                .font: labelFont,
+                .foregroundColor: theme.secondaryTextColor,
+                .paragraphStyle: paragraphStyle
+            ]))
             let keys = fields.compactMap(\.key).filter { !$0.isEmpty }
-            if !keys.isEmpty {
+            if !expanded, !keys.isEmpty {
                 var summary = keys.joined(separator: ", ")
                 if summary.count > 60 {
                     summary = String(summary.prefix(57)).trimmingCharacters(in: .whitespacesAndNewlines) + "…"
@@ -1054,7 +1075,7 @@ struct MarkdownTextView: NSViewRepresentable {
             PreviewTextView.frontmatterToggleKey: expanded ? "expanded" : "collapsed",
             .cursor: NSCursor.pointingHand
         ], range: NSRange(location: 0, length: header.length))
-        header.append(NSAttributedString(string: "\n", attributes: [.font: titleFont, .paragraphStyle: paragraphStyle]))
+        header.append(NSAttributedString(string: "\n", attributes: [.font: labelFont, .paragraphStyle: paragraphStyle]))
         result.append(header)
 
         if expanded {
@@ -1084,6 +1105,14 @@ struct MarkdownTextView: NSViewRepresentable {
             .foregroundColor: theme.selectionColor,
             .paragraphStyle: separatorStyle
         ]))
+    }
+
+    /// A YAML scalar without its surrounding quotes, if any (`title: "Rendering check"`).
+    nonisolated static func unquotedYAMLScalar(_ value: String) -> String {
+        let trimmed = value.trimmingCharacters(in: .whitespaces)
+        guard trimmed.count >= 2, let first = trimmed.first, let last = trimmed.last,
+              first == last, first == "\"" || first == "'" else { return trimmed }
+        return String(trimmed.dropFirst().dropLast())
     }
 
     private func appendCodeBlock(code: String, language: String? = nil, to result: NSMutableAttributedString) {
