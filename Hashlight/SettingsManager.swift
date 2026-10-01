@@ -241,10 +241,11 @@ class SettingsManager: ObservableObject {
         }
     }
 
-    /// Tick that bumps when the system effective appearance changes (light ↔ dark). Views
-    /// observing SettingsManager re-render and pass a fresh appearance into MarkdownTextView's
-    /// cache key so cached code-block colors get rebuilt for the new theme. Without this,
-    /// toggling system theme served stale cached colors until the next content edit (H4).
+    /// Tick that bumps when the system effective appearance changes (light ↔ dark), when the
+    /// system colors change (accent color), or when the accessibility display options change
+    /// (Increase Contrast). Views observing SettingsManager re-render, resolve the preview theme
+    /// again — the System themes are rebuilt from the current system colors — and pass it into
+    /// MarkdownTextView, whose cache key includes the resolved palette.
     @Published var appearanceTick: Int = 0
     private var appearanceObserver: NSKeyValueObservation?
 
@@ -458,7 +459,20 @@ class SettingsManager: ObservableObject {
                     self?.appearanceTick &+= 1
                 }
             }
+            // Selector observers are removed automatically when the observer deallocates.
+            NotificationCenter.default.addObserver(
+                self, selector: #selector(self.systemColorsDidChange(_:)),
+                name: NSColor.systemColorsDidChangeNotification, object: nil
+            )
+            NSWorkspace.shared.notificationCenter.addObserver(
+                self, selector: #selector(self.systemColorsDidChange(_:)),
+                name: NSWorkspace.accessibilityDisplayOptionsDidChangeNotification, object: nil
+            )
         }
+    }
+
+    @objc private func systemColorsDidChange(_ notification: Notification) {
+        appearanceTick &+= 1
     }
 
     deinit {

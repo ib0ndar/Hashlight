@@ -54,7 +54,7 @@ class WebRenderer: NSObject {
     // MARK: - Mermaid
 
     func renderMermaid(_ code: String, theme: PreviewTheme, completion: @escaping (NSImage?) -> Void) {
-        let key = cacheKey(for: code + "\u{1F}" + theme.id, prefix: "mermaid-")
+        let key = cacheKey(for: code + "\u{1F}" + theme.cacheKey, prefix: "mermaid-")
         if let cached = imageCache.object(forKey: key as NSString) {
             completion(cached)
             return

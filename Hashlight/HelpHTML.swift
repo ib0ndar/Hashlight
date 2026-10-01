@@ -91,8 +91,11 @@ enum HelpHTML {
         <p>The choice changes the icon in the Dock, the app switcher, the welcome screen, and Hashlight → About Hashlight while Hashlight runs. Finder keeps the standard icon.</p>
         <h3>Markdown Preview Theme (Preview)</h3>
         <p>Use the <strong>Light mode</strong> and <strong>Dark mode</strong> menus to choose a
-        separate Base16 theme for each appearance. The preview switches between them automatically
-        when the effective application appearance changes.</p>
+        separate theme for each appearance. <strong>System</strong> uses macOS's own colors: the
+        text background, label and separator colors, your accent color for headings and links, and
+        the system reds, greens and so on for code; it follows changes to the accent color and to
+        Increase Contrast. The other entries are Base16 palettes. The preview switches between the
+        light and dark choice automatically when the effective application appearance changes.</p>
         <h3>Preview Fonts (Preview)</h3>
         <ul>
             <li><strong>Main font</strong> - Proportional font used for headings, paragraphs, lists, and tables</li>

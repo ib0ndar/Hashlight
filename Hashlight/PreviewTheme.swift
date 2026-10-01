@@ -59,37 +59,118 @@ struct PreviewTheme: Codable, Hashable, Identifiable, Sendable {
     var backgroundHex: String { palette.base00 }
     var textHex: String { palette.base05 }
 
-    static func system(for colorScheme: ColorScheme) -> PreviewTheme {
-        colorScheme == .dark ? systemDark : systemLight
+    static let systemLightID = "system-light"
+    static let systemDarkID = "system-dark"
+
+    /// The System themes are rebuilt from macOS's colors (see `system(dark:)`), so the same
+    /// `id` can stand for different palettes over time.
+    var isSystem: Bool { id == Self.systemLightID || id == Self.systemDarkID }
+
+    /// Key for caches of rendered output: the id for a bundled theme, the id plus the resolved
+    /// palette for a System theme, so an accent or contrast change is not served stale colors.
+    var cacheKey: String {
+        guard isSystem else { return id }
+        let fingerprint = [
+            palette.base00, palette.base01, palette.base02, palette.base03,
+            palette.base04, palette.base05, palette.base06, palette.base07,
+            palette.base08, palette.base09, palette.base0A, palette.base0B,
+            palette.base0C, palette.base0D, palette.base0E, palette.base0F
+        ].map { $0.dropFirst() }.joined()
+        return "\(id)-\(fingerprint)"
     }
 
-    // GitHub's neutral palettes are close to the native NSTextView defaults while still giving
-    // the WebKit renderers concrete RGB values. These remain the default "System" preview.
-    private static let systemLight = PreviewTheme(
-        id: "system-light",
-        name: "System",
-        author: "Hashlight",
-        variant: "light",
-        palette: Palette(
-            base00: "#FFFFFF", base01: "#F6F8FA", base02: "#D0D7DE", base03: "#6E7781",
-            base04: "#57606A", base05: "#24292F", base06: "#1F2328", base07: "#000000",
-            base08: "#CF222E", base09: "#953800", base0A: "#9A6700", base0B: "#1A7F37",
-            base0C: "#0A7A83", base0D: "#0969DA", base0E: "#8250DF", base0F: "#A40E26"
-        )
-    )
+    static func system(for colorScheme: ColorScheme) -> PreviewTheme {
+        system(dark: colorScheme == .dark)
+    }
 
-    private static let systemDark = PreviewTheme(
-        id: "system-dark",
-        name: "System",
-        author: "Hashlight",
-        variant: "dark",
-        palette: Palette(
-            base00: "#0D1117", base01: "#161B22", base02: "#30363D", base03: "#8B949E",
-            base04: "#B1BAC4", base05: "#C9D1D9", base06: "#E6EDF3", base07: "#FFFFFF",
-            base08: "#FF7B72", base09: "#FFA657", base0A: "#D29922", base0B: "#7EE787",
-            base0C: "#A5D6FF", base0D: "#58A6FF", base0E: "#D2A8FF", base0F: "#F2CC60"
+    /// The macOS palette for the light or dark appearance: text background, label colors,
+    /// separator, the accent color for headings and links, and the system hues for syntax,
+    /// resolved now (they follow System Settings → Appearance, including the accent color and
+    /// Increase Contrast). Semi-transparent system colors are composited over the background
+    /// because every consumer, WebKit included, needs opaque RGB.
+    static func system(dark: Bool) -> PreviewTheme {
+        let appearance = NSAppearance(named: dark ? .darkAqua : .aqua) ?? NSAppearance.currentDrawing()
+        var palette: Palette?
+        appearance.performAsCurrentDrawingAppearance {
+            palette = SystemPalette.resolve(dark: dark)
+        }
+        return PreviewTheme(
+            id: dark ? systemDarkID : systemLightID,
+            name: "System",
+            author: "macOS",
+            variant: dark ? "dark" : "light",
+            palette: palette ?? SystemPalette.resolve(dark: dark)
         )
-    )
+    }
+}
+
+/// Builds a Base16 palette from the system colors of the current drawing appearance.
+private enum SystemPalette {
+    static func resolve(dark: Bool) -> PreviewTheme.Palette {
+        let background = rgb(.textBackgroundColor) ?? (dark ? RGB(0.12, 0.12, 0.12) : RGB(1, 1, 1))
+        func over(_ color: NSColor) -> RGB {
+            composite(rgb(color, keepAlpha: true) ?? background, over: background)
+        }
+
+        let ink = over(NSColor.labelColor.withAlphaComponent(1))
+        let text = over(.labelColor)
+        let secondary = over(.secondaryLabelColor)
+        // Light text on white needs more ink than the system hues carry; the dark variants are
+        // already designed for dark backgrounds. The accent keeps its exact color.
+        func hue(_ color: NSColor, extra: Double = 0) -> RGB {
+            let resolved = over(color)
+            return dark ? resolved : mix(resolved, ink, 0.35 + extra)
+        }
+
+        return PreviewTheme.Palette(
+            base00: hex(background),
+            base01: hex(mix(background, ink, 0.05)),
+            base02: hex(over(.separatorColor)),
+            base03: hex(secondary),
+            base04: hex(mix(secondary, text, 0.4)),
+            base05: hex(text),
+            base06: hex(mix(text, ink, 0.5)),
+            base07: hex(ink),
+            base08: hex(hue(.systemRed)),
+            base09: hex(hue(.systemOrange)),
+            base0A: hex(hue(.systemYellow, extra: 0.15)),
+            base0B: hex(hue(.systemGreen)),
+            base0C: hex(hue(.systemTeal)),
+            base0D: hex(over(.controlAccentColor)),
+            base0E: hex(hue(.systemPurple)),
+            base0F: hex(hue(.systemBrown))
+        )
+    }
+
+    struct RGB {
+        var red: Double, green: Double, blue: Double, alpha: Double = 1
+        init(_ red: Double, _ green: Double, _ blue: Double, alpha: Double = 1) {
+            self.red = red; self.green = green; self.blue = blue; self.alpha = alpha
+        }
+    }
+
+    private static func rgb(_ color: NSColor, keepAlpha: Bool = false) -> RGB? {
+        guard let srgb = color.usingColorSpace(.sRGB) else { return nil }
+        return RGB(srgb.redComponent, srgb.greenComponent, srgb.blueComponent, alpha: keepAlpha ? srgb.alphaComponent : 1)
+    }
+
+    private static func composite(_ color: RGB, over background: RGB) -> RGB {
+        mix(background, RGB(color.red, color.green, color.blue), color.alpha)
+    }
+
+    private static func mix(_ from: RGB, _ to: RGB, _ fraction: Double) -> RGB {
+        let t = min(max(fraction, 0), 1)
+        return RGB(
+            from.red + (to.red - from.red) * t,
+            from.green + (to.green - from.green) * t,
+            from.blue + (to.blue - from.blue) * t
+        )
+    }
+
+    private static func hex(_ color: RGB) -> String {
+        func channel(_ value: Double) -> Int { Int((min(max(value, 0), 1) * 255).rounded()) }
+        return String(format: "#%02X%02X%02X", channel(color.red), channel(color.green), channel(color.blue))
+    }
 }
 
 struct PreviewThemeBundle: Decodable, Sendable {
@@ -106,7 +187,8 @@ enum PreviewThemeCatalog {
     static let defaultLightID = "github"
     static let defaultDarkID = "github-dark"
 
-    static let all: [PreviewTheme] = {
+    /// The pinned Base16 catalog, loaded once.
+    static let bundled: [PreviewTheme] = {
         guard let url = Bundle.main.url(
             forResource: "Base16Themes",
             withExtension: "json",
@@ -120,8 +202,18 @@ enum PreviewThemeCatalog {
         return bundle.themes
     }()
 
+    /// The System theme of each appearance, resolved from the current system colors on every
+    /// access, followed by the bundled catalog.
+    static var all: [PreviewTheme] { [systemLight, systemDark] + bundled }
+
+    static var systemLight: PreviewTheme { .system(dark: false) }
+    static var systemDark: PreviewTheme { .system(dark: true) }
+
     static var light: [PreviewTheme] { all.filter { !$0.isDark } }
     static var dark: [PreviewTheme] { all.filter(\.isDark) }
+
+    static var bundledLight: [PreviewTheme] { bundled.filter { !$0.isDark } }
+    static var bundledDark: [PreviewTheme] { bundled.filter(\.isDark) }
 
     static func validatedLightID(_ id: String?) -> String {
         if let id, light.contains(where: { $0.id == id }) {

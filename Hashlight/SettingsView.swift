@@ -147,14 +147,18 @@ struct PreviewSettingsPane: View {
         Form {
             Section("Theme") {
                 Picker("Light mode", selection: $settings.lightPreviewThemeID) {
-                    ForEach(PreviewThemeCatalog.light) { theme in
+                    Text(PreviewThemeCatalog.systemLight.name).tag(PreviewTheme.systemLightID)
+                    Divider()
+                    ForEach(PreviewThemeCatalog.bundledLight) { theme in
                         Text(theme.name).tag(theme.id)
                     }
                 }
                 .pickerStyle(.menu)
 
                 Picker("Dark mode", selection: $settings.darkPreviewThemeID) {
-                    ForEach(PreviewThemeCatalog.dark) { theme in
+                    Text(PreviewThemeCatalog.systemDark.name).tag(PreviewTheme.systemDarkID)
+                    Divider()
+                    ForEach(PreviewThemeCatalog.bundledDark) { theme in
                         Text(theme.name).tag(theme.id)
                     }
                 }

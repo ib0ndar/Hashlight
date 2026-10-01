@@ -55,7 +55,7 @@ struct MarkdownTextView: NSViewRepresentable {
 
     /// Everything besides content + zoom that changes what gets built.
     private var styleKey: String {
-        "\(mainFontID)-\(fixedFontID)-\(contentWidth.rawValue)-\(theme.id)-\(tableColumnConfiguration.cacheKey)"
+        "\(mainFontID)-\(fixedFontID)-\(contentWidth.rawValue)-\(theme.cacheKey)-\(tableColumnConfiguration.cacheKey)"
     }
 
     func makeNSView(context: Context) -> NSScrollView {
@@ -1437,7 +1437,7 @@ struct MarkdownTextView: NSViewRepresentable {
     // MARK: - Mermaid & Math
 
     private func appendMermaidBlock(code: String, to result: NSMutableAttributedString) {
-        let cacheKey = "mermaid-\(theme.id)-" + code
+        let cacheKey = "mermaid-\(theme.cacheKey)-" + code
         if let cached = Coordinator.diagramCache.object(forKey: cacheKey as NSString) {
             // Embed cached image
             let attachment = NSTextAttachment()
@@ -1484,7 +1484,7 @@ struct MarkdownTextView: NSViewRepresentable {
     }
 
     private func appendDisplayMath(latex: String, to result: NSMutableAttributedString) {
-        let cacheKey = "math-display-\(theme.id)-" + latex
+        let cacheKey = "math-display-\(theme.cacheKey)-" + latex
         if let cached = Coordinator.diagramCache.object(forKey: cacheKey as NSString) {
             let attachment = NSTextAttachment()
             attachment.image = cached
@@ -1712,7 +1712,7 @@ struct MarkdownTextView: NSViewRepresentable {
 
             let contentRange = match.range(at: 1)
             let latex = string.substring(with: contentRange)
-            let cacheKey = "math-inline-\(theme.id)-" + latex
+            let cacheKey = "math-inline-\(theme.cacheKey)-" + latex
 
             // Preserve the existing attributes (especially .paragraphStyle, which carries the
             // table-cell textBlocks attribute). NSAttributedString(attachment:) and a fresh
