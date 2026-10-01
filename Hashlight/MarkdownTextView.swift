@@ -1016,6 +1016,21 @@ struct MarkdownTextView: NSViewRepresentable {
 
     private func appendFrontmatter(lines: [String], expanded: Bool, to result: NSMutableAttributedString) {
         guard !lines.isEmpty else { return }
+
+        // The typesetter ignores paragraphSpacingBefore on the container's first paragraph, and
+        // the frontmatter is always first, so the card would lose its top inset. A paragraph of
+        // (near) zero height ahead of the card makes the header the second paragraph; the
+        // text view clips drawing to the container, so the card cannot simply extend upward.
+        if result.length == 0 {
+            let spacerStyle = NSMutableParagraphStyle()
+            spacerStyle.maximumLineHeight = 0.01
+            spacerStyle.lineSpacing = 0
+            spacerStyle.paragraphSpacing = 0
+            result.append(NSAttributedString(string: "\n", attributes: [
+                .font: NSFont.systemFont(ofSize: 1),
+                .paragraphStyle: spacerStyle
+            ]))
+        }
         let blockStart = result.length
 
         // Xcode's rendering: a bordered card holding a disclosure row labelled with the
@@ -1067,23 +1082,23 @@ struct MarkdownTextView: NSViewRepresentable {
         // The card's padding comes from the paragraph styles, as for code blocks: spacing
         // before the first line and after the last, indents on every line.
         let headerStyle = NSMutableParagraphStyle()
-        headerStyle.firstLineHeadIndent = CodeBlockCard.horizontalPadding
-        headerStyle.headIndent = CodeBlockCard.horizontalPadding
-        headerStyle.tailIndent = -CodeBlockCard.horizontalPadding
-        headerStyle.paragraphSpacingBefore = CodeBlockCard.verticalPadding
-        headerStyle.paragraphSpacing = expanded ? 4 : CodeBlockCard.verticalPadding
+        headerStyle.firstLineHeadIndent = FrontmatterFold.horizontalPadding
+        headerStyle.headIndent = FrontmatterFold.horizontalPadding
+        headerStyle.tailIndent = -FrontmatterFold.horizontalPadding
+        headerStyle.paragraphSpacingBefore = FrontmatterFold.verticalPadding
+        headerStyle.paragraphSpacing = expanded ? 4 : FrontmatterFold.verticalPadding
         header.addAttribute(.paragraphStyle, value: headerStyle, range: NSRange(location: 0, length: header.length))
         result.append(header)
 
         if expanded {
             for (index, line) in yamlLines.enumerated() {
                 let lineStyle = NSMutableParagraphStyle()
-                lineStyle.firstLineHeadIndent = CodeBlockCard.horizontalPadding
-                lineStyle.headIndent = CodeBlockCard.horizontalPadding
-                lineStyle.tailIndent = -CodeBlockCard.horizontalPadding
+                lineStyle.firstLineHeadIndent = FrontmatterFold.horizontalPadding
+                lineStyle.headIndent = FrontmatterFold.horizontalPadding
+                lineStyle.tailIndent = -FrontmatterFold.horizontalPadding
                 lineStyle.lineSpacing = 2
                 if index == yamlLines.count - 1 {
-                    lineStyle.paragraphSpacing = CodeBlockCard.verticalPadding
+                    lineStyle.paragraphSpacing = FrontmatterFold.verticalPadding
                 }
                 result.append(NSAttributedString(string: line + "\n", attributes: [
                     .font: yamlFont,
@@ -2229,6 +2244,9 @@ nonisolated final class CodeBlockPayload: PreviewCardPayload {
 nonisolated enum FrontmatterFold {
     static let collapsedMarker = "\u{25B6}\u{FE0E}"
     static let expandedMarker = "\u{25BC}\u{FE0E}"
+    /// Tighter than the code cards: the fold is a slim row, not a content block.
+    static let verticalPadding: CGFloat = 6
+    static let horizontalPadding: CGFloat = 10
 }
 
 /// Geometry of the code-block card, shared by the attributed text (padding through paragraph
