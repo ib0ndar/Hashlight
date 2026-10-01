@@ -62,7 +62,7 @@ Open .md --> Rendered preview (reloads when the file changes) --> Export PDF/HTM
 - **Task lists** — `- [ ]` / `- [x]` rendered as read-only checkboxes
 - **GitHub alerts** — `> [!NOTE]`, `[!TIP]`, `[!IMPORTANT]`, `[!WARNING]`, `[!CAUTION]` callouts (preview and every export)
 - **Code block copy** — hover a code block for a copy button, or right-click → Copy Code Block
-- **Layout** — position the text column left / center / right and choose its width (Narrow → Full), from Settings → Preview or the status bar
+- **Layout** — position the text column left / center / right and choose its width (Narrow → Full), from Settings → Viewing or the status bar
 
 ### Navigation & Search
 - **Window** — a resizable, collapsible sidebar and a toolbar with Open, Focus Mode, Export, and Find (Liquid Glass on macOS 26; a standard toolbar on macOS 13–15)

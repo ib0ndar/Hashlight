@@ -127,7 +127,7 @@ nonisolated final class SettingsPaneTests: XCTestCase {
     @MainActor
     func testThePaneKeyAndValuesAreStable() {
         XCTAssertEqual(DefaultsKeys.settingsPane, "settingsPane")
-        XCTAssertEqual(SettingsPane.allCases.map(\.rawValue), ["general", "preview", "tables"])
+        XCTAssertEqual(SettingsPane.allCases.map(\.rawValue), ["general", "viewing", "tables"])
     }
 
     @MainActor

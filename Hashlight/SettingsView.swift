@@ -3,7 +3,7 @@ import SwiftUI
 /// The Settings panes. The raw value is persisted, so Settings reopens on the last pane.
 enum SettingsPane: String, CaseIterable {
     case general
-    case preview
+    case viewing
     case tables
 
     static let width: CGFloat = 520
@@ -13,7 +13,7 @@ enum SettingsPane: String, CaseIterable {
     var height: CGFloat {
         switch self {
         case .general: return 200
-        case .preview: return 540
+        case .viewing: return 540
         case .tables: return 360
         }
     }
@@ -32,12 +32,12 @@ struct SettingsView: View {
                 }
                 .tag(SettingsPane.general)
 
-            PreviewSettingsPane(settings: settings)
-                .frame(width: SettingsPane.width, height: SettingsPane.preview.height)
+            ViewingSettingsPane(settings: settings)
+                .frame(width: SettingsPane.width, height: SettingsPane.viewing.height)
                 .tabItem {
-                    Label("Preview", systemImage: "doc.richtext")
+                    Label("Viewing", systemImage: "doc.richtext")
                 }
-                .tag(SettingsPane.preview)
+                .tag(SettingsPane.viewing)
 
             TablesSettingsPane(settings: settings)
                 .frame(width: SettingsPane.width, height: SettingsPane.tables.height)
@@ -138,9 +138,10 @@ struct GeneralSettingsPane: View {
     }
 }
 
-// MARK: - Preview
+// MARK: - Viewing
 
-struct PreviewSettingsPane: View {
+/// How documents are shown: theme, fonts, and the text column's layout.
+struct ViewingSettingsPane: View {
     @ObservedObject var settings: SettingsManager
 
     var body: some View {
@@ -224,7 +225,7 @@ struct PreviewSettingsPane: View {
             } header: {
                 Text("Layout")
             } footer: {
-                Text("Set the preview's maximum text width, horizontal page margin, and alignment. Full uses the available pane width; every preset shrinks to fit a narrow pane. Zoom is in the View menu (⌘= / ⌘− / ⌘0).")
+                Text("Set the text column's maximum width, horizontal page margin, and alignment. Full uses the available pane width; every preset shrinks to fit a narrow pane. Zoom is in the View menu (⌘= / ⌘− / ⌘0).")
             }
         }
         .formStyle(.grouped)

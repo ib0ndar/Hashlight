@@ -89,20 +89,20 @@ enum HelpHTML {
             <li><strong>Ember</strong> - Always the dark icon</li>
         </ul>
         <p>The choice changes the icon in the Dock, the app switcher, the welcome screen, and Hashlight → About Hashlight while Hashlight runs. Finder keeps the standard icon.</p>
-        <h3>Markdown Preview Theme (Preview)</h3>
+        <h3>Theme (Viewing)</h3>
         <p>Use the <strong>Light mode</strong> and <strong>Dark mode</strong> menus to choose a
         separate theme for each appearance. <strong>System</strong> uses macOS's own colors: the
         text background, label and separator colors, your accent color for headings and links, and
         the system reds, greens and so on for code; it follows changes to the accent color and to
         Increase Contrast. The other entries are Base16 palettes. The preview switches between the
         light and dark choice automatically when the effective application appearance changes.</p>
-        <h3>Preview Fonts (Preview)</h3>
+        <h3>Fonts (Viewing)</h3>
         <ul>
             <li><strong>Main font</strong> - Proportional font used for headings, paragraphs, lists, and tables</li>
             <li><strong>Fixed font</strong> - Monospaced font used for fenced code blocks and inline commands</li>
         </ul>
         <h3>Layout and Zoom</h3>
-        <p>Set the text column's alignment, width and page margin in Settings → Preview or from the status bar. Zoom with <kbd>⌘=</kbd>, <kbd>⌘-</kbd> and <kbd>⌘0</kbd> (View menu), the status bar, or pinch on a trackpad.</p>
+        <p>Set the text column's alignment, width and page margin in Settings → Viewing or from the status bar. Zoom with <kbd>⌘=</kbd>, <kbd>⌘-</kbd> and <kbd>⌘0</kbd> (View menu), the status bar, or pinch on a trackpad.</p>
         <h3>Table Columns (Tables)</h3>
         <p>Table columns get room in proportion to the weight of the first category whose words match the column header. Add, remove, edit, and reorder categories (drag a row, or <kbd>⌥↑</kbd> / <kbd>⌥↓</kbd>); <strong>Restore Defaults</strong> brings back the built-in set.</p>
 
