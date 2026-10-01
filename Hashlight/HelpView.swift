@@ -5,33 +5,25 @@ struct HelpView: View {
     @Environment(\.dismiss) var dismiss
 
     var body: some View {
-        VStack(spacing: 0) {
-            // Header
-            HStack {
-                Text("Hashlight Help")
-                    .font(.system(size: 20, weight: .semibold))
-                Spacer()
-                // Visible, labeled close button. Previously this was an empty-title invisible
-                // button that worked for Escape but announced nothing to screen readers.
-                Button {
-                    dismiss()
-                } label: {
-                    Image(systemName: "xmark.circle.fill")
-                        .font(.system(size: 18))
-                        .foregroundStyle(.secondary)
+        HelpWebView()
+            .frame(width: 760, height: 520)
+            .navigationTitle("Hashlight Help")
+            .toolbar {
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Done") {
+                        dismiss()
+                    }
                 }
-                .buttonStyle(.plain)
-                .keyboardShortcut(.cancelAction)
-                .accessibilityLabel("Close Help")
             }
-            .padding()
-
-            Divider()
-
-            // Help content
-            HelpWebView()
-        }
-        .frame(width: 800, height: 600)
+            // Escape closes Help too (Done answers Return).
+            .background {
+                Button("Close Help") {
+                    dismiss()
+                }
+                .keyboardShortcut(.cancelAction)
+                .opacity(0)
+                .accessibilityHidden(true)
+            }
     }
 }
 

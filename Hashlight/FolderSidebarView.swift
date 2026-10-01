@@ -1,163 +1,134 @@
 import SwiftUI
 
+/// The navigator's Files mode: the open folder's Markdown files as a sidebar outline list.
 struct FolderSidebarView: View {
     @EnvironmentObject var documentManager: DocumentManager
     @EnvironmentObject var folderManager: FolderManager
-    @State private var expandedDirectories: Set<String> = []
-    @State private var closeButtonHovered = false
+    @State private var selection: String?
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            // Header
-            HStack {
-                Image(systemName: "folder.fill")
-                    .font(.system(size: 12))
-                    .foregroundStyle(Color.accentColor)
+        List(selection: $selection) {
+            Section {
+                FileTreeRows(items: folderManager.fileTree, expandedDirectories: $folderManager.expandedDirectoryIDs)
+            } header: {
                 Text(folderManager.folderURL?.lastPathComponent ?? "Folder")
-                    .font(.system(size: 11, weight: .semibold))
-                    .foregroundStyle(.secondary)
-                    .lineLimit(1)
-                Spacer()
-                Button(action: {
-                    NSHapticFeedbackManager.defaultPerformer.perform(.generic, performanceTime: .now)
-                    withAnimation(Motion.standard) {
-                        folderManager.closeFolder()
-                    }
-                }) {
-                    Image(systemName: "xmark")
-                        .font(.system(size: 10, weight: .medium))
-                        .foregroundStyle(closeButtonHovered ? .primary : .secondary)
-                        .frame(width: 18, height: 18)
-                        .background(
-                            RoundedRectangle(cornerRadius: 3)
-                                .fill(closeButtonHovered ? Color(NSColor.controlBackgroundColor) : Color.clear)
-                        )
-                }
-                .buttonStyle(PressableButtonStyle())
-                .accessibilityLabel("Close Folder")
-                .onHover { hovering in
-                    withAnimation(Motion.fast) {
-                        closeButtonHovered = hovering
-                    }
-                }
-            }
-            .padding(.horizontal, 12)
-            .padding(.vertical, 10)
-
-            Divider()
-
-            // File tree
-            ScrollView {
-                LazyVStack(alignment: .leading, spacing: 1) {
-                    ForEach(folderManager.fileTree) { item in
-                        FileTreeItemView(
-                            item: item,
-                            depth: 0,
-                            expandedDirectories: $expandedDirectories,
-                            onFileSelected: { url in
-                                documentManager.loadDocument(from: url)
-                            },
-                            activeURL: activeDocumentURL
-                        )
-                    }
-                }
-                .padding(.vertical, 4)
+                    .contextMenu { folderMenu }
             }
         }
-        .frame(width: 220)
-        .background(.ultraThinMaterial)
+        .listStyle(.sidebar)
+        .contextMenu(forSelectionType: String.self) { ids in
+            if let item = ids.first.flatMap({ folderManager.itemsByID[$0] }) {
+                itemMenu(item)
+            } else {
+                folderMenu
+            }
+        } primaryAction: { ids in
+            guard let id = ids.first, let item = folderManager.itemsByID[id] else { return }
+            if item.isDirectory {
+                toggleExpansion(of: id)
+            } else {
+                documentManager.loadDocument(from: item.url)
+            }
+        }
+        .onChange(of: selection) { id in
+            guard let id, let item = folderManager.itemsByID[id], !item.isDirectory,
+                  item.url.standardizedFileURL != activeDocumentURL?.standardizedFileURL else { return }
+            documentManager.loadDocument(from: item.url)
+        }
+        .onChange(of: activeDocumentURL) { url in
+            syncSelection(to: url)
+        }
+        .onReceive(folderManager.$fileTree) { _ in
+            // The tree loads after the view appears and reloads on file-system changes.
+            DispatchQueue.main.async { syncSelection(to: activeDocumentURL) }
+        }
+        .onAppear { syncSelection(to: activeDocumentURL) }
     }
 
     private var activeDocumentURL: URL? {
         guard let selectedId = documentManager.selectedDocumentId else { return nil }
         return documentManager.openDocuments.first(where: { $0.id == selectedId })?.url
     }
-}
 
-struct FileTreeItemView: View {
-    let item: FileTreeItem
-    let depth: Int
-    @Binding var expandedDirectories: Set<String>
-    let onFileSelected: (URL) -> Void
-    let activeURL: URL?
-    @State private var isHovered = false
-
-    private var isExpanded: Bool {
-        expandedDirectories.contains(item.id)
+    private func syncSelection(to url: URL?) {
+        let id = url.flatMap { folderManager.itemID(for: $0) }
+        // Leave a selected folder row alone while the active document is outside the tree.
+        if id != nil || selection.flatMap({ folderManager.itemsByID[$0] })?.isDirectory != true {
+            if selection != id { selection = id }
+        }
     }
 
-    var body: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            Button(action: {
-                if item.isDirectory {
-                    withAnimation(Motion.standard) {
-                        if isExpanded {
-                            expandedDirectories.remove(item.id)
-                        } else {
-                            expandedDirectories.insert(item.id)
-                        }
-                    }
-                } else {
-                    onFileSelected(item.url)
-                }
-            }) {
-                HStack(spacing: 4) {
-                    if item.isDirectory {
-                        Image(systemName: "chevron.right")
-                            .font(.system(size: 9, weight: .semibold))
-                            .foregroundStyle(Color(nsColor: .secondaryLabelColor))
-                            .frame(width: 12)
-                            .rotationEffect(.degrees(isExpanded ? 90 : 0))
-                    } else {
-                        Spacer()
-                            .frame(width: 12)
-                    }
-
-                    Image(systemName: item.isDirectory ? (isExpanded ? "folder.fill" : "folder") : "doc.text")
-                        .font(.system(size: 12))
-                        .foregroundStyle(item.isDirectory ? Color.accentColor : Color.secondary)
-
-                    Text(item.name)
-                        .font(.system(size: 12))
-                        .lineLimit(1)
-                        .foregroundStyle(isActive ? Color.primary : (isHovered ? Color.primary.opacity(0.8) : Color.secondary))
-
-                    Spacer()
-                }
-                .padding(.leading, CGFloat(8 + depth * 16))
-                .padding(.trailing, 8)
-                .padding(.vertical, 4)
-                .background(
-                    RoundedRectangle(cornerRadius: 4)
-                        .fill(isActive ? Color.accentColor.opacity(0.12) : (isHovered ? Color.accentColor.opacity(0.06) : Color.clear))
-                )
-            }
-            .buttonStyle(PressableButtonStyle())
-            .onHover { hovering in
-                withAnimation(Motion.fast) {
-                    isHovered = hovering
-                }
-            }
-            .padding(.horizontal, 4)
-
-            // Show children if expanded
-            if item.isDirectory && isExpanded, let children = item.children {
-                ForEach(children) { child in
-                    FileTreeItemView(
-                        item: child,
-                        depth: depth + 1,
-                        expandedDirectories: $expandedDirectories,
-                        onFileSelected: onFileSelected,
-                        activeURL: activeURL
-                    )
-                    .transition(Motion.slideOrFade(edge: .top))
-                }
+    private func toggleExpansion(of id: String) {
+        withAnimation(Motion.standard) {
+            if folderManager.expandedDirectoryIDs.contains(id) {
+                folderManager.expandedDirectoryIDs.remove(id)
+            } else {
+                folderManager.expandedDirectoryIDs.insert(id)
             }
         }
     }
 
-    private var isActive: Bool {
-        guard let activeURL = activeURL else { return false }
-        return item.url == activeURL
+    @ViewBuilder
+    private func itemMenu(_ item: FileTreeItem) -> some View {
+        if !item.isDirectory {
+            Button("Open") {
+                documentManager.loadDocument(from: item.url)
+            }
+        }
+        Button("Reveal in Finder") {
+            NSWorkspace.shared.activateFileViewerSelecting([item.url])
+        }
+        Divider()
+        folderMenu
+    }
+
+    @ViewBuilder
+    private var folderMenu: some View {
+        if let folderURL = folderManager.folderURL {
+            Button("Reveal Folder in Finder") {
+                NSWorkspace.shared.activateFileViewerSelecting([folderURL])
+            }
+        }
+        Button("Close Folder") {
+            folderManager.closeFolder()
+        }
+    }
+}
+
+/// One level of the file tree; folders nest the next level in a disclosure group.
+private struct FileTreeRows: View {
+    let items: [FileTreeItem]
+    @Binding var expandedDirectories: Set<String>
+
+    var body: some View {
+        ForEach(items) { item in
+            if item.isDirectory, let children = item.children {
+                DisclosureGroup(isExpanded: expansion(of: item.id)) {
+                    FileTreeRows(items: children, expandedDirectories: $expandedDirectories)
+                } label: {
+                    Label(item.name, systemImage: "folder")
+                        .lineLimit(1)
+                        .tag(item.id)
+                }
+            } else {
+                Label(item.name, systemImage: "doc.text")
+                    .lineLimit(1)
+                    .help(item.url.path)
+                    .tag(item.id)
+            }
+        }
+    }
+
+    private func expansion(of id: String) -> Binding<Bool> {
+        Binding(
+            get: { expandedDirectories.contains(id) },
+            set: { isExpanded in
+                if isExpanded {
+                    expandedDirectories.insert(id)
+                } else {
+                    expandedDirectories.remove(id)
+                }
+            }
+        )
     }
 }

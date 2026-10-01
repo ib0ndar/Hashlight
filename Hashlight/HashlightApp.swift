@@ -45,26 +45,14 @@ struct HashlightApp: App {
                 .environmentObject(documentManager)
                 .environmentObject(folderManager)
                 .environmentObject(settings)
-                .frame(minWidth: 700, minHeight: 550)
+                .frame(minWidth: 700, minHeight: 500)
                 .onAppear {
                     // Set up window delegate after window is created
                     DispatchQueue.main.async {
                         if let window = NSApplication.shared.windows.first {
                             let delegate = WindowCloseDelegate.shared
                             delegate.documentManager = documentManager
-                            window.delegate = delegate
-                            delegate.attachWindowChrome(to: window)
-                            // Set default window size on first launch
-                            if window.frame.width < 900 || window.frame.height < 650 {
-                                let screen = window.screen ?? NSScreen.main
-                                let screenFrame = screen?.visibleFrame ?? NSRect(x: 0, y: 0, width: 1440, height: 900)
-                                let newSize = NSSize(width: 1000, height: 700)
-                                let origin = NSPoint(
-                                    x: screenFrame.midX - newSize.width / 2,
-                                    y: screenFrame.midY - newSize.height / 2
-                                )
-                                window.setFrame(NSRect(origin: origin, size: newSize), display: true, animate: false)
-                            }
+                            delegate.attach(to: window)
                         }
                     }
                     // Restore last-opened folder
@@ -74,7 +62,14 @@ struct HashlightApp: App {
                     HelpView()
                 }
         }
+        .defaultSize(width: 1000, height: 700)
         .commands {
+            CommandGroup(replacing: .appInfo) {
+                Button("About Hashlight") {
+                    AboutPanel.show()
+                }
+            }
+
             // Keep ⌘W reserved for Close Tab. SwiftUI places the native Close command in
             // `saveItem`; replacing that group removes its duplicate ⌘W binding while the
             // red titlebar button continues to use the NSWindow close delegate below. A viewer
@@ -82,8 +77,7 @@ struct HashlightApp: App {
             // leave two adjacent separators in the File menu).
             CommandGroup(replacing: .saveItem) {
                 Button("Open File Location") {
-                    if let selectedId = documentManager.selectedDocumentId,
-                       let document = documentManager.openDocuments.first(where: { $0.id == selectedId }) {
+                    if let document = documentManager.selectedDocument {
                         documentManager.revealInFinder(document: document)
                     }
                 }
@@ -98,8 +92,12 @@ struct HashlightApp: App {
             }
 
             CommandGroup(replacing: .newItem) {
-                Button("Open...") {
+                // macOS 27 shows menu icons only for key actions; Open is one.
+                Button {
                     documentManager.openFile()
+                } label: {
+                    Label("Open...", systemImage: "folder")
+                        .labelStyle(.titleAndIcon)
                 }
                 .keyboardShortcut("o", modifiers: .command)
 
@@ -114,8 +112,10 @@ struct HashlightApp: App {
                 }
                 .keyboardShortcut("f", modifiers: [.control, .shift])
 
-                Button("Open Folder...") {
+                Button {
                     folderManager.openFolder()
+                } label: {
+                    Label("Open Folder...", systemImage: "text.below.folder")
                 }
                 .keyboardShortcut("o", modifiers: [.command, .option])
 
@@ -145,62 +145,39 @@ struct HashlightApp: App {
             }
 
             CommandGroup(replacing: .printItem) {
-                Button("Print...") {
-                    if let selectedId = documentManager.selectedDocumentId,
-                       let document = documentManager.openDocuments.first(where: { $0.id == selectedId }) {
-                        PrintManager.shared.print(content: document.content, fileName: document.name)
-                    }
-                }
-                .keyboardShortcut("p", modifiers: .command)
-                .disabled(documentManager.openDocuments.isEmpty)
+                PrintMenuItem(documentManager: documentManager)
+                    .keyboardShortcut("p", modifiers: .command)
             }
 
             CommandGroup(after: .importExport) {
-                Menu("Export") {
-                    Button("PDF...") {
-                        if let selectedId = documentManager.selectedDocumentId,
-                           let document = documentManager.openDocuments.first(where: { $0.id == selectedId }) {
-                            ExportManager.shared.exportToPDF(content: document.content, fileName: document.name, baseURL: document.url)
-                        }
-                    }
-                    .disabled(documentManager.openDocuments.isEmpty)
-
-                    Divider()
-
-                    Button("HTML...") {
-                        if let selectedId = documentManager.selectedDocumentId,
-                           let document = documentManager.openDocuments.first(where: { $0.id == selectedId }) {
-                            ExportManager.shared.exportToHTML(content: document.content, fileName: document.name, includeStyles: true)
-                        }
-                    }
-                    .disabled(documentManager.openDocuments.isEmpty)
-
-                    Button("HTML (without styles)...") {
-                        if let selectedId = documentManager.selectedDocumentId,
-                           let document = documentManager.openDocuments.first(where: { $0.id == selectedId }) {
-                            ExportManager.shared.exportToHTML(content: document.content, fileName: document.name, includeStyles: false)
-                        }
-                    }
-                    .disabled(documentManager.openDocuments.isEmpty)
-
-                    Divider()
-
-                    Button("Word (.docx)...") {
-                        if let selectedId = documentManager.selectedDocumentId,
-                           let document = documentManager.openDocuments.first(where: { $0.id == selectedId }) {
-                            ExportManager.shared.exportToDOCX(content: document.content, fileName: document.name, baseURL: document.url)
-                        }
-                    }
-                    .disabled(documentManager.openDocuments.isEmpty)
-
-                    Button("Word (.rtf)...") {
-                        if let selectedId = documentManager.selectedDocumentId,
-                           let document = documentManager.openDocuments.first(where: { $0.id == selectedId }) {
-                            ExportManager.shared.exportToWord(content: document.content, fileName: document.name, baseURL: document.url)
-                        }
-                    }
-                    .disabled(documentManager.openDocuments.isEmpty)
+                Menu {
+                    ExportMenuItems(documentManager: documentManager)
+                } label: {
+                    Label("Export", systemImage: "square.and.arrow.up")
                 }
+            }
+
+            // The sidebar is the navigator; its toolbar toggle comes from NavigationSplitView.
+            CommandGroup(replacing: .sidebar) {
+                Button(settings.isNavigatorVisible ? "Hide Sidebar" : "Show Sidebar") {
+                    settings.toggleNavigator()
+                }
+                .keyboardShortcut("s", modifiers: [.command, .control])
+                .disabled(documentManager.isFocusModeActive)
+
+                // ⌘⌥1 / ⌘⌥2 follow Xcode's navigator shortcuts.
+                Menu("Navigator") {
+                    Button(SettingsManager.NavigatorMode.files.displayName) {
+                        settings.showNavigator(.files)
+                    }
+                    .keyboardShortcut("1", modifiers: [.command, .option])
+
+                    Button(SettingsManager.NavigatorMode.outline.displayName) {
+                        settings.showNavigator(.outline)
+                    }
+                    .keyboardShortcut("2", modifiers: [.command, .option])
+                }
+                .disabled(documentManager.isFocusModeActive)
             }
 
             // Extend the standard View menu (which already holds Enter Full Screen) instead of
@@ -246,8 +223,7 @@ struct HashlightApp: App {
 
             CommandMenu("Tab") {
                 Button("Close Tab") {
-                    if let selectedId = documentManager.selectedDocumentId,
-                       let document = documentManager.openDocuments.first(where: { $0.id == selectedId }) {
+                    if let document = documentManager.selectedDocument {
                         documentManager.closeDocument(document)
                     }
                 }
@@ -278,11 +254,12 @@ struct HashlightApp: App {
             CommandGroup(after: .textEditing) {
                 Divider()
 
+                // Focuses the toolbar's search field.
                 Button("Find...") {
-                    documentManager.startSearch()
+                    NotificationCenter.default.post(name: .focusFindField, object: nil)
                 }
                 .keyboardShortcut("f", modifiers: .command)
-                .disabled(documentManager.openDocuments.isEmpty)
+                .disabled(documentManager.openDocuments.isEmpty || documentManager.isFocusModeActive)
 
                 Button("Find Next") {
                     documentManager.nextMatch()
@@ -312,11 +289,42 @@ struct HashlightApp: App {
     }
 }
 
+/// The standard About panel. It shows the icon the Dock shows (the Dock icon setting) and the
+/// "Based on zMD" credit from Credits.rtf.
+enum AboutPanel {
+    static func options(icon: NSImage, bundle: Bundle = .main) -> [NSApplication.AboutPanelOptionKey: Any] {
+        var options: [NSApplication.AboutPanelOptionKey: Any] = [.applicationIcon: icon]
+        if let version = bundle.infoDictionary?["CFBundleShortVersionString"] as? String {
+            options[.applicationVersion] = version
+        }
+        if let credits = credits(in: bundle) {
+            options[.credits] = credits
+        }
+        return options
+    }
+
+    static func credits(in bundle: Bundle = .main) -> NSAttributedString? {
+        guard let url = bundle.url(forResource: "Credits", withExtension: "rtf") else { return nil }
+        return try? NSAttributedString(url: url, options: [.documentType: NSAttributedString.DocumentType.rtf], documentAttributes: nil)
+    }
+
+    static func show() {
+        NSApplication.shared.activate(ignoringOtherApps: true)
+        NSApplication.shared.orderFrontStandardAboutPanel(options: options(icon: DockIconController.shared.image))
+    }
+}
+
 // AppDelegate to prevent app from quitting when window closes. It deliberately does not
 // implement applicationShouldTerminate(_:): a viewer has nothing to save, so Quit is immediate.
 class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
         return false
+    }
+
+    func applicationWillTerminate(_ notification: Notification) {
+        SidebarAutosave.repair(
+            in: NSApplication.shared.windows.first(where: { $0.identifier?.rawValue == "main" })
+        )
     }
 
     func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
@@ -373,38 +381,42 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     }
 }
 
-// Window delegate to handle window close events
+// Window delegate to handle window close events. The window's title and proxy icon come from
+// the detail view's navigationTitle / navigationDocument.
 class WindowCloseDelegate: NSObject, NSWindowDelegate {
     static let shared = WindowCloseDelegate()
-    weak var documentManager: DocumentManager?
-    private weak var chromeWindow: NSWindow?
-    private var chromeCancellable: AnyCancellable?
+    weak var documentManager: DocumentManager? {
+        didSet { observeFocusMode() }
+    }
+    private weak var window: NSWindow?
+    private var focusModeCancellable: AnyCancellable?
+    private var chromeOutsideFocusMode: FocusModeWindowChrome.SavedChrome?
 
-    /// Mirror the selected document into the window's titlebar: title and proxy icon
-    /// (representedURL — drag-file-from-titlebar, ⌘-click path menu). The app previously carried
-    /// document identity only in its own tab bar; the OS-level wayfinding affordances every
-    /// macOS document app ships were absent.
-    func attachWindowChrome(to window: NSWindow) {
-        chromeWindow = window
-        updateWindowChrome()
-        chromeCancellable = documentManager?.objectWillChange
-            // objectWillChange fires BEFORE the mutation — hop to the next main-queue
-            // turn so we read post-mutation state.
-            .receive(on: DispatchQueue.main)
-            .sink { [weak self] _ in self?.updateWindowChrome() }
+    func attach(to window: NSWindow) {
+        self.window = window
+        window.delegate = self
+        observeFocusMode()
     }
 
-    private func updateWindowChrome() {
-        guard let window = chromeWindow, let documentManager else { return }
-        let doc = documentManager.selectedDocumentId.flatMap { id in
-            documentManager.openDocuments.first(where: { $0.id == id })
-        }
-        let title = doc?.name ?? "Hashlight"
-        let url = doc?.url
-        // Equality guards: this runs on every DocumentManager publish (including find-bar
-        // typing); actual window mutations must stay rare.
-        if window.title != title { window.title = title }
-        if window.representedURL != url { window.representedURL = url }
+    /// Focus mode keeps the window controls but nothing else of the title bar, like the
+    /// distraction-free modes of Mac writing apps. SwiftUI's `toolbar(.hidden, for:
+    /// .windowToolbar)` removes the window controls too on macOS 26, so the title bar is changed
+    /// on the NSWindow. `$isFocusModeActive` delivers the new value.
+    private func observeFocusMode() {
+        guard let documentManager, window != nil else { return }
+        focusModeCancellable = documentManager.$isFocusModeActive
+            .removeDuplicates()
+            .sink { [weak self] isActive in
+                guard let self, let window = self.window else { return }
+                if isActive {
+                    if chromeOutsideFocusMode == nil {
+                        chromeOutsideFocusMode = FocusModeWindowChrome.enter(window)
+                    }
+                } else if let saved = chromeOutsideFocusMode {
+                    FocusModeWindowChrome.leave(window, restoring: saved)
+                    chromeOutsideFocusMode = nil
+                }
+            }
     }
 
     /// The red titlebar button closes every tab at once, without asking: there is nothing to
@@ -414,11 +426,91 @@ class WindowCloseDelegate: NSObject, NSWindowDelegate {
         return true
     }
 
+    func windowWillClose(_ notification: Notification) {
+        SidebarAutosave.repair(in: notification.object as? NSWindow)
+        // Focus mode belongs to the window it was turned on in; the next window starts with
+        // the sidebar as saved. Animated, because AppKit widens a window whose sidebar
+        // reappears without animation.
+        if documentManager?.isFocusModeActive == true {
+            withAnimation(Motion.sidebar) {
+                documentManager?.isFocusModeActive = false
+            }
+        }
+    }
+
     /// Closing the last tab also dismisses the window. The red button's all-tabs close does not
     /// come through here (closeAllDocuments skips it), since that window is already closing.
     func closeWindowWhenEmpty() {
         guard documentManager?.openDocuments.isEmpty == true,
-              chromeWindow != nil else { return }
+              window != nil else { return }
         documentManager?.closeMainWindow()
+    }
+}
+
+/// The NSWindow side of focus mode: the title bar becomes transparent over full-size content,
+/// so the document runs under it and only the window controls remain. The title, proxy icon,
+/// and toolbar items are SwiftUI's (`navigationTitle`, `navigationDocument`, `ViewerToolbar`)
+/// and are cleared there; hiding the toolbar itself resizes the window. `enter` returns what to
+/// put back.
+enum FocusModeWindowChrome {
+    struct SavedChrome: Equatable {
+        var titlebarAppearsTransparent: Bool
+        var hasFullSizeContentView: Bool
+    }
+
+    @MainActor
+    static func enter(_ window: NSWindow) -> SavedChrome {
+        let saved = SavedChrome(
+            titlebarAppearsTransparent: window.titlebarAppearsTransparent,
+            hasFullSizeContentView: window.styleMask.contains(.fullSizeContentView)
+        )
+        window.titlebarAppearsTransparent = true
+        window.styleMask.insert(.fullSizeContentView)
+        return saved
+    }
+
+    @MainActor
+    static func leave(_ window: NSWindow, restoring saved: SavedChrome) {
+        if !saved.hasFullSizeContentView {
+            window.styleMask.remove(.fullSizeContentView)
+        }
+        window.titlebarAppearsTransparent = saved.titlebarAppearsTransparent
+    }
+}
+
+/// Focus mode hides the sidebar for the session only, but AppKit autosaves the split view with
+/// the sidebar collapsed. A window that restores it collapsed while the navigator should show
+/// widens itself by the sidebar's width to show it, so when a window closes or the app quits,
+/// a collapsed state the navigator setting does not ask for is corrected.
+enum SidebarAutosave {
+    static func repair(in window: NSWindow?) {
+        guard SettingsManager.shared.isNavigatorVisible,
+              let splitView = firstSplitView(in: window?.contentView),
+              let name = splitView.autosaveName, !name.isEmpty else { return }
+        let key = "NSSplitView Subview Frames \(name)"
+        guard let frames = UserDefaults.standard.stringArray(forKey: key),
+              let repaired = framesWithSidebarExpanded(frames) else { return }
+        UserDefaults.standard.set(repaired, forKey: key)
+    }
+
+    /// `frames` with the first (sidebar) entry marked expanded, or nil if it already is or the
+    /// format is not the expected "x, y, width, height, isCollapsed, isHidden" per subview.
+    static func framesWithSidebarExpanded(_ frames: [String]) -> [String]? {
+        guard let sidebar = frames.first else { return nil }
+        var fields = sidebar.components(separatedBy: ", ")
+        guard fields.count == 6, fields[4] == "YES" else { return nil }
+        fields[4] = "NO"
+        var repaired = frames
+        repaired[0] = fields.joined(separator: ", ")
+        return repaired
+    }
+
+    private static func firstSplitView(in view: NSView?) -> NSSplitView? {
+        guard let view else { return nil }
+        if let splitView = view as? NSSplitView { return splitView }
+        for subview in view.subviews {
+            if let splitView = firstSplitView(in: subview) { return splitView }
+        }
+        return nil
     }
 }

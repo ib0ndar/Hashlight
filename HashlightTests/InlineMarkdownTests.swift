@@ -331,13 +331,11 @@ nonisolated final class FolderManagerTests: XCTestCase {
         let manager = FolderManager.shared
         let previousFolderURL = manager.folderURL
         let previousFileTree = manager.fileTree
-        let previousShowingSidebar = manager.isShowingFolderSidebar
 
         defer {
             manager.closeFolder()
             manager.folderURL = previousFolderURL
             manager.fileTree = previousFileTree
-            manager.isShowingFolderSidebar = previousShowingSidebar
         }
 
         let done = expectation(description: "tree scan completes without crashing")

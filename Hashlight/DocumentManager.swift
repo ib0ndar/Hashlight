@@ -474,6 +474,12 @@ struct MarkdownDocument: Identifiable {
 }
 
 extension DocumentManager {
+    /// The document in the selected tab.
+    var selectedDocument: MarkdownDocument? {
+        guard let selectedDocumentId else { return nil }
+        return openDocuments.first(where: { $0.id == selectedDocumentId })
+    }
+
     func startSearch() {
         isSearching = true
         searchText = ""

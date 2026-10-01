@@ -45,9 +45,11 @@ enum Motion {
     static var standard: Animation? {
         layoutAnimation(reduceMotion: reduceMotion)
     }
-    /// Large layout morphs (focus mode). Upper bound of the UI budget.
-    static var morph: Animation? {
-        reduceMotion ? nil : .easeInOut(duration: 0.3)
+    /// Showing or hiding the sidebar, including focus mode, which hides it. Upper bound of the
+    /// UI budget. Never nil: AppKit widens the window instead of narrowing the document when a
+    /// sidebar appears without animation, so Reduce Motion gets a near-instant animation.
+    static var sidebar: Animation {
+        reduceMotion ? .linear(duration: 0.01) : .easeInOut(duration: 0.3)
     }
     /// Subtle spring for stack reflows and rare entrances (toasts, welcome
     /// icon). Bounce is intentionally quiet; nil under Reduce Motion.
@@ -140,8 +142,15 @@ enum DefaultsKeys {
     // MARK: FolderManager
     static let folderBookmark = "FolderBookmarkData"
 
-    // MARK: ContentView
-    static let showOutline = "showOutline"
+    // MARK: Main window navigator (SettingsManager)
+    static let navigatorMode = "navigatorMode"
+    static let navigatorVisible = "navigatorVisible"
+    /// Used only to migrate the former outline-pane toggle to the navigator settings.
+    static let legacyShowOutline = "showOutline"
+
+    // MARK: SettingsView
+    /// The Settings pane shown last; Settings reopens on it.
+    static let settingsPane = "settingsPane"
 }
 
 class SettingsManager: ObservableObject {
@@ -218,6 +227,20 @@ class SettingsManager: ObservableObject {
         }
     }
 
+    /// What the main window's sidebar shows: the open folder's files or the document outline.
+    @Published var navigatorMode: NavigatorMode {
+        didSet {
+            UserDefaults.standard.set(navigatorMode.rawValue, forKey: DefaultsKeys.navigatorMode)
+        }
+    }
+
+    /// Whether the main window's sidebar is shown (focus mode hides it without changing this).
+    @Published var isNavigatorVisible: Bool {
+        didSet {
+            UserDefaults.standard.set(isNavigatorVisible, forKey: DefaultsKeys.navigatorVisible)
+        }
+    }
+
     /// Tick that bumps when the system effective appearance changes (light ↔ dark). Views
     /// observing SettingsManager re-render and pass a fresh appearance into MarkdownTextView's
     /// cache key so cached code-block colors get rebuilt for the new theme. Without this,
@@ -235,6 +258,20 @@ class SettingsManager: ObservableObject {
 
     func resetZoom() {
         zoomLevel = 1.0
+    }
+
+    /// Shows the sidebar in `mode` (View → Navigator, and after Open Folder).
+    func showNavigator(_ mode: NavigatorMode) {
+        withAnimation(Motion.sidebar) {
+            navigatorMode = mode
+            isNavigatorVisible = true
+        }
+    }
+
+    func toggleNavigator() {
+        withAnimation(Motion.sidebar) {
+            isNavigatorVisible.toggle()
+        }
     }
 
     /// Horizontal placement of the preview's text column. This positions the whole column
@@ -314,6 +351,47 @@ class SettingsManager: ObservableObject {
         }
     }
 
+    enum NavigatorMode: String, CaseIterable {
+        case files
+        case outline
+
+        var displayName: String {
+            switch self {
+            case .files: return "Files"
+            case .outline: return "Outline"
+            }
+        }
+    }
+
+    /// Reads the saved navigator settings, migrating builds that had separate folder and outline
+    /// panes: a shown outline becomes a visible Outline navigator; otherwise an open folder (its
+    /// pane was always shown) becomes a visible Files navigator. The migrated values are written
+    /// back and the legacy key is removed, so this runs once.
+    static func loadNavigatorState(from defaults: UserDefaults) -> (mode: NavigatorMode, isVisible: Bool) {
+        let savedMode = defaults.string(forKey: DefaultsKeys.navigatorMode).flatMap(NavigatorMode.init(rawValue:))
+        let savedVisibility = defaults.object(forKey: DefaultsKeys.navigatorVisible) as? Bool
+        if savedMode != nil || savedVisibility != nil {
+            return (savedMode ?? .outline, savedVisibility ?? false)
+        }
+
+        let state: (mode: NavigatorMode, isVisible: Bool)
+        if defaults.bool(forKey: DefaultsKeys.legacyShowOutline) {
+            state = (.outline, true)
+        } else if defaults.data(forKey: DefaultsKeys.folderBookmark) != nil {
+            state = (.files, true)
+        } else {
+            state = (.outline, false)
+        }
+        guard defaults.object(forKey: DefaultsKeys.legacyShowOutline) != nil
+                || defaults.data(forKey: DefaultsKeys.folderBookmark) != nil else {
+            return state
+        }
+        defaults.set(state.mode.rawValue, forKey: DefaultsKeys.navigatorMode)
+        defaults.set(state.isVisible, forKey: DefaultsKeys.navigatorVisible)
+        defaults.removeObject(forKey: DefaultsKeys.legacyShowOutline)
+        return state
+    }
+
     init() {
         // Load saved preferences
         let legacyThemeID = UserDefaults.standard.string(forKey: DefaultsKeys.legacyPreviewThemeID)
@@ -349,6 +427,10 @@ class SettingsManager: ObservableObject {
 
         let savedZoom = UserDefaults.standard.double(forKey: DefaultsKeys.zoomLevel)
         self.zoomLevel = savedZoom > 0 ? CGFloat(savedZoom) : 1.0
+
+        let navigator = Self.loadNavigatorState(from: .standard)
+        self.navigatorMode = navigator.mode
+        self.isNavigatorVisible = navigator.isVisible
 
         let savedScheme = UserDefaults.standard.string(forKey: DefaultsKeys.colorScheme) ?? "system"
         switch savedScheme {

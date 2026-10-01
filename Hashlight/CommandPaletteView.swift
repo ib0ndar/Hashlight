@@ -8,16 +8,6 @@ enum CommandCategory: String, CaseIterable {
     case edit = "Edit"
     case export = "Export"
     case navigation = "Navigation"
-
-    var color: Color {
-        switch self {
-        case .file: return .blue
-        case .view: return .purple
-        case .edit: return .orange
-        case .export: return .green
-        case .navigation: return .teal
-        }
-    }
 }
 
 struct CommandAction: Identifiable {
@@ -65,6 +55,15 @@ class CommandRegistry {
             CommandAction(name: "Toggle Focus Mode", category: .view, shortcut: "\u{2318}\u{21E7}F", icon: "arrow.up.left.and.arrow.down.right", isEnabled: { true }) {
                 NotificationCenter.default.post(name: .toggleFocusMode, object: nil)
             },
+            CommandAction(name: "Toggle Sidebar", category: .view, shortcut: "\u{2303}\u{2318}S", icon: "sidebar.left", isEnabled: { !documentManager.isFocusModeActive }) {
+                SettingsManager.shared.toggleNavigator()
+            },
+            CommandAction(name: "Show Files", category: .view, shortcut: "\u{2318}\u{2325}1", icon: "folder", isEnabled: { !documentManager.isFocusModeActive }) {
+                SettingsManager.shared.showNavigator(.files)
+            },
+            CommandAction(name: "Show Outline", category: .view, shortcut: "\u{2318}\u{2325}2", icon: "list.bullet.indent", isEnabled: { !documentManager.isFocusModeActive }) {
+                SettingsManager.shared.showNavigator(.outline)
+            },
             CommandAction(name: "Zoom In", category: .view, shortcut: "\u{2318}=", icon: "plus.magnifyingglass", isEnabled: { true }) {
                 SettingsManager.shared.zoomIn()
             },
@@ -76,8 +75,8 @@ class CommandRegistry {
             },
 
             // Edit
-            CommandAction(name: "Find", category: .edit, shortcut: "\u{2318}F", icon: "magnifyingglass", isEnabled: hasDoc) {
-                documentManager.startSearch()
+            CommandAction(name: "Find", category: .edit, shortcut: "\u{2318}F", icon: "magnifyingglass", isEnabled: { hasDoc() && !documentManager.isFocusModeActive }) {
+                NotificationCenter.default.post(name: .focusFindField, object: nil)
             },
 
             // Export
@@ -165,8 +164,9 @@ struct CommandPaletteOverlay: View {
 
     var body: some View {
         ZStack {
-            // Dimmed background
-            Color.black.opacity(0.3)
+            // Clicking outside the palette dismisses it. No dimming: the card separates itself.
+            Color.clear
+                .contentShape(Rectangle())
                 .ignoresSafeArea()
                 .onTapGesture {
                     isPresented = false
@@ -212,7 +212,7 @@ struct CommandPaletteOverlay: View {
                                         isSelected: index == selectedIndex
                                     )
                                 }
-                                .buttonStyle(PressableButtonStyle())
+                                .buttonStyle(.plain)
                             }
                         }
                         .padding(.vertical, 4)
@@ -236,9 +236,7 @@ struct CommandPaletteOverlay: View {
                 }
             }
             .frame(width: 460)
-            .background(.ultraThinMaterial)
-            .clipShape(RoundedRectangle(cornerRadius: 12))
-            .shadow(color: .black.opacity(0.2), radius: 20, y: 8)
+            .floatingPanelBackground()
             .padding(.top, 80)
             .frame(maxHeight: .infinity, alignment: .top)
         }
@@ -272,13 +270,10 @@ struct CommandRow: View {
             // Category badge
             Text(command.category.rawValue)
                 .font(.system(size: 9, weight: .semibold))
-                .foregroundStyle(.white)
+                .foregroundStyle(.secondary)
                 .padding(.horizontal, 6)
                 .padding(.vertical, 2)
-                .background(
-                    RoundedRectangle(cornerRadius: 3)
-                        .fill(command.category.color)
-                )
+                .background(.quaternary, in: Capsule())
 
             // Icon
             Image(systemName: command.icon)
@@ -314,6 +309,21 @@ struct CommandRow: View {
                 .padding(.horizontal, 4)
         )
         .contentShape(Rectangle())
+    }
+}
+
+extension View {
+    /// Background for a panel floating over the window (command palette, Quick Open): Liquid
+    /// Glass on macOS 26, the regular material with a soft shadow before.
+    @ViewBuilder
+    func floatingPanelBackground(cornerRadius: CGFloat = 12) -> some View {
+        if #available(macOS 26, *) {
+            self.glassEffect(.regular, in: .rect(cornerRadius: cornerRadius))
+        } else {
+            self
+                .background(.regularMaterial, in: RoundedRectangle(cornerRadius: cornerRadius))
+                .shadow(color: .black.opacity(0.2), radius: 20, y: 8)
+        }
     }
 }
 

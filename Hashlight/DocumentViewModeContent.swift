@@ -38,5 +38,32 @@ struct DocumentViewModeContent: View {
             pageMargin: settings.pageMargin,
             tableColumnConfiguration: settings.tableColumnConfiguration
         )
+        .onAppear {
+            DispatchQueue.main.async {
+                PreviewFocus.focusPreviewIfIdle()
+            }
+        }
+    }
+}
+
+/// Gives the preview keyboard focus (Space, arrows and Page keys scroll it) when it appears,
+/// unless the user is working in a text field or a list. Without this the window's first key
+/// view, the toolbar's sidebar toggle, took focus and Space toggled the sidebar.
+enum PreviewFocus {
+    static func focusPreviewIfIdle() {
+        guard let window = NSApp.windows.first(where: { $0.identifier?.rawValue == "main" }),
+              let preview = firstPreview(in: window.contentView) else { return }
+        let responder = window.firstResponder
+        if responder is NSTextView || responder is NSTableView { return }
+        window.makeFirstResponder(preview)
+    }
+
+    private static func firstPreview(in view: NSView?) -> PreviewTextView? {
+        guard let view else { return nil }
+        if let preview = view as? PreviewTextView { return preview }
+        for subview in view.subviews {
+            if let preview = firstPreview(in: subview) { return preview }
+        }
+        return nil
     }
 }

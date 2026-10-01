@@ -96,7 +96,7 @@ Rendering and export must stay in sync:
 
 Open an issue at <https://github.com/ib0ndar/Hashlight/issues> with:
 
-- macOS version and Hashlight version (Hashlight → Settings → About, or
+- macOS version and Hashlight version (Hashlight → About Hashlight, or
   `defaults read /Applications/Hashlight.app/Contents/Info.plist CFBundleShortVersionString`)
 - Steps to reproduce — a minimal markdown snippet that triggers the bug is
   worth a thousand words

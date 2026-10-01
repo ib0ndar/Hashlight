@@ -1,23 +1,51 @@
 import SwiftUI
 
+/// The Settings panes. The raw value is persisted, so Settings reopens on the last pane.
+enum SettingsPane: String, CaseIterable {
+    case general
+    case preview
+    case tables
+
+    static let width: CGFloat = 520
+
+    /// Each pane sizes the window to its own content (HIG: a settings window accommodates the
+    /// size of the current pane).
+    var height: CGFloat {
+        switch self {
+        case .general: return 200
+        case .preview: return 540
+        case .tables: return 360
+        }
+    }
+}
+
 struct SettingsView: View {
     @ObservedObject var settings = SettingsManager.shared
+    @AppStorage(DefaultsKeys.settingsPane) private var pane: SettingsPane = .general
 
     var body: some View {
-        TabView {
-            AppearanceSettingsTab(settings: settings)
+        TabView(selection: $pane) {
+            GeneralSettingsPane(settings: settings)
+                .frame(width: SettingsPane.width, height: SettingsPane.general.height)
                 .tabItem {
-                    Label("Appearance", systemImage: "paintbrush")
+                    Label("General", systemImage: "gearshape")
                 }
+                .tag(SettingsPane.general)
 
-            AboutTab()
+            PreviewSettingsPane(settings: settings)
+                .frame(width: SettingsPane.width, height: SettingsPane.preview.height)
                 .tabItem {
-                    Label("About", systemImage: "info.circle")
+                    Label("Preview", systemImage: "doc.richtext")
                 }
+                .tag(SettingsPane.preview)
+
+            TablesSettingsPane(settings: settings)
+                .frame(width: SettingsPane.width, height: SettingsPane.tables.height)
+                .tabItem {
+                    Label("Tables", systemImage: "tablecells")
+                }
+                .tag(SettingsPane.tables)
         }
-        // Height fits the tallest tab (Appearance: Theme, Font, Layout, Zoom). The tabs are
-        // non-scrolling forms, so an undersized window silently cuts rows off.
-        .frame(width: 480, height: 620)
         .background(EscapeKeyHandler())
     }
 }
@@ -62,11 +90,10 @@ private final class EscapeKeyHandlingView: NSView {
     }
 }
 
-// MARK: - Appearance
+// MARK: - General
 
-struct AppearanceSettingsTab: View {
+struct GeneralSettingsPane: View {
     @ObservedObject var settings: SettingsManager
-    @State private var isShowingAdvanced = false
 
     private var appAppearance: Binding<ColorScheme?> {
         Binding(
@@ -87,14 +114,38 @@ struct AppearanceSettingsTab: View {
 
     var body: some View {
         Form {
-            Section("Theme") {
+            Section {
                 Picker("Appearance", selection: appAppearance) {
                     Text("System").tag(nil as ColorScheme?)
                     Text("Light").tag(ColorScheme.light as ColorScheme?)
                     Text("Dark").tag(ColorScheme.dark as ColorScheme?)
                 }
                 .pickerStyle(.segmented)
+            }
 
+            Section {
+                Picker("Dock icon", selection: $settings.dockIconMode) {
+                    ForEach(SettingsManager.DockIconMode.allCases, id: \.self) { mode in
+                        Text(mode.displayName).tag(mode)
+                    }
+                }
+                .pickerStyle(.segmented)
+            } footer: {
+                Text(dockIconFootnote)
+            }
+        }
+        .formStyle(.grouped)
+    }
+}
+
+// MARK: - Preview
+
+struct PreviewSettingsPane: View {
+    @ObservedObject var settings: SettingsManager
+
+    var body: some View {
+        Form {
+            Section("Theme") {
                 Picker("Light mode", selection: $settings.lightPreviewThemeID) {
                     ForEach(PreviewThemeCatalog.light) { theme in
                         Text(theme.name).tag(theme.id)
@@ -110,20 +161,7 @@ struct AppearanceSettingsTab: View {
                 .pickerStyle(.menu)
             }
 
-            Section("Icon") {
-                Picker("Dock icon", selection: $settings.dockIconMode) {
-                    ForEach(SettingsManager.DockIconMode.allCases, id: \.self) { mode in
-                        Text(mode.displayName).tag(mode)
-                    }
-                }
-                .pickerStyle(.segmented)
-
-                Text(dockIconFootnote)
-                    .font(.system(size: 11))
-                    .foregroundStyle(.secondary)
-            }
-
-            Section("Font") {
+            Section("Fonts") {
                 Picker("Main font", selection: $settings.mainPreviewFontID) {
                     ForEach(PreviewFontCatalog.mainOptions) { option in
                         Text(option.name).tag(option.id)
@@ -138,27 +176,27 @@ struct AppearanceSettingsTab: View {
                 }
                 .pickerStyle(.menu)
 
-                HStack {
-                    Text("Preview")
-                        .foregroundStyle(.secondary)
-                    Spacer()
-                    Text("Markdown text")
-                        .font(PreviewFontCatalog.swiftUIFont(
-                            id: settings.mainPreviewFontID,
-                            size: 13,
-                            monospaced: false
-                        ))
-                    Text("code --help")
-                        .font(PreviewFontCatalog.swiftUIFont(
-                            id: settings.fixedPreviewFontID,
-                            size: 12,
-                            monospaced: true
-                        ))
-                        .foregroundStyle(.secondary)
+                LabeledContent("Sample") {
+                    HStack(spacing: 10) {
+                        Text("Markdown text")
+                            .font(PreviewFontCatalog.swiftUIFont(
+                                id: settings.mainPreviewFontID,
+                                size: 13,
+                                monospaced: false
+                            ))
+                            .foregroundStyle(.primary)
+                        Text("code --help")
+                            .font(PreviewFontCatalog.swiftUIFont(
+                                id: settings.fixedPreviewFontID,
+                                size: 12,
+                                monospaced: true
+                            ))
+                            .foregroundStyle(.secondary)
+                    }
                 }
             }
 
-            Section("Layout") {
+            Section {
                 Picker("Content alignment", selection: $settings.contentAlignment) {
                     ForEach(SettingsManager.ContentAlignment.allCases, id: \.self) { alignment in
                         Label(alignment.displayName, systemImage: alignment.icon).tag(alignment)
@@ -179,243 +217,210 @@ struct AppearanceSettingsTab: View {
                     }
                 }
                 .pickerStyle(.segmented)
-
-                Text("Set the preview's maximum text width, horizontal page margin, and alignment. Full uses the available pane width; every preset shrinks to fit a narrow pane.")
-                    .font(.system(size: 11))
-                    .foregroundStyle(.secondary)
-            }
-
-            Section("Zoom") {
-                HStack {
-                    Button {
-                        settings.zoomOut()
-                    } label: {
-                        Image(systemName: "minus.magnifyingglass")
-                    }
-                    .buttonStyle(.borderless)
-                    .disabled(settings.zoomLevel <= 0.5)
-                    .accessibilityLabel("Zoom Out")
-
-                    Spacer()
-
-                    Text("\(Int(settings.zoomLevel * 100))%")
-                        .font(.system(size: 13, weight: .medium, design: .monospaced))
-                        .frame(width: 50)
-
-                    Spacer()
-
-                    Button {
-                        settings.zoomIn()
-                    } label: {
-                        Image(systemName: "plus.magnifyingglass")
-                    }
-                    .buttonStyle(.borderless)
-                    .disabled(settings.zoomLevel >= 2.0)
-                    .accessibilityLabel("Zoom In")
-                }
-
-                if settings.zoomLevel != 1.0 {
-                    Button("Reset to 100%") {
-                        settings.resetZoom()
-                    }
-                    .font(.system(size: 12))
-                }
-            }
-
-            Section("Advanced") {
-                Button("Advanced…") {
-                    isShowingAdvanced = true
-                }
+            } header: {
+                Text("Layout")
+            } footer: {
+                Text("Set the preview's maximum text width, horizontal page margin, and alignment. Full uses the available pane width; every preset shrinks to fit a narrow pane. Zoom is in the View menu (⌘= / ⌘− / ⌘0).")
             }
         }
         .formStyle(.grouped)
-        .sheet(isPresented: $isShowingAdvanced) {
-            TableColumnCategoriesSettingsView(settings: settings)
-        }
     }
 }
 
-// MARK: - About
+// MARK: - Tables
 
-struct AboutTab: View {
-    @ObservedObject private var dockIcon = DockIconController.shared
-
-    var body: some View {
-        VStack(spacing: 16) {
-            Spacer()
-
-            Image(nsImage: dockIcon.image)
-                .resizable()
-                .frame(width: 80, height: 80)
-
-            Text("Hashlight")
-                .font(.system(size: 20, weight: .semibold))
-
-            Text("Version \(Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "1.0")")
-                .font(.system(size: 13))
-                .foregroundStyle(.secondary)
-
-            Text("A lightweight markdown viewer for macOS")
-                .font(.system(size: 12))
-                .foregroundStyle(.secondary)
-
-            Spacer()
-
-            Text("Based on zMD by Zachary Rossmiller")
-                .font(.system(size: 11))
-                .foregroundStyle(Color.secondary.opacity(0.5))
-                .padding(.bottom, 12)
-        }
-    }
-}
-
-
-// MARK: - Advanced Appearance
-
-private struct TableColumnCategoriesSettingsView: View {
+struct TablesSettingsPane: View {
     @ObservedObject var settings: SettingsManager
-    @Environment(\.dismiss) private var dismiss
+    @State private var selectedID: String?
+    @State private var editorRequest: CategoryEditorRequest?
+    @State private var isConfirmingRestore = false
+
+    private var configuration: MarkdownTableColumnConfiguration {
+        settings.tableColumnConfiguration
+    }
+
+    private var selectedCategory: MarkdownTableColumnCategory? {
+        selectedID.flatMap { configuration.category(withID: $0) }
+    }
 
     var body: some View {
-        NavigationStack {
-            List {
-                ForEach(Array(settings.tableColumnConfiguration.categories.enumerated()), id: \.element.id) { index, category in
-                    HStack {
-                        NavigationLink {
-                            TableColumnCategoryEditorView(settings: settings, categoryID: category.id)
-                        } label: {
-                            HStack(spacing: 12) {
-                                Text(String(index + 1))
-                                    .font(.system(size: 12, design: .monospaced))
-                                    .foregroundStyle(.secondary)
-                                    .frame(width: 22, alignment: .trailing)
-                                VStack(alignment: .leading, spacing: 3) {
-                                    Text(category.name.isEmpty ? "Untitled Category" : category.name)
-                                        .foregroundStyle(.primary)
-                                    Text("\(category.weight.formatted(.number.precision(.fractionLength(0...3)))) · \(category.words.count) match words")
-                                        .font(.system(size: 11))
-                                        .foregroundStyle(.secondary)
-                                }
-                            }
-                        }
-                        Spacer(minLength: 6)
-                        VStack(spacing: 2) {
-                            Button {
-                                moveCategory(id: category.id, by: -1)
-                            } label: {
-                                Image(systemName: "chevron.up")
-                            }
-                            .disabled(index == 0)
-                            .accessibilityLabel("Move \(category.name) up")
-                            Button {
-                                moveCategory(id: category.id, by: 1)
-                            } label: {
-                                Image(systemName: "chevron.down")
-                            }
-                            .disabled(index == settings.tableColumnConfiguration.categories.count - 1)
-                            .accessibilityLabel("Move \(category.name) down")
-                        }
-                        .buttonStyle(.borderless)
-                        if category.canBeRemoved {
-                            Button(role: .destructive) {
-                                removeCategory(id: category.id)
-                            } label: {
-                                Image(systemName: "trash")
-                                    .foregroundStyle(.secondary)
-                            }
-                            .buttonStyle(.borderless)
-                            .accessibilityLabel("Remove \(category.name)")
-                        }
-                    }
-                }
-            }
-            .listStyle(.inset)
-            .safeAreaInset(edge: .bottom) {
-                Text("The first matching category wins. Other sets the weight for unmatched headers; if removed, the fallback weight is 1.0.")
-                    .font(.system(size: 11))
-                    .foregroundStyle(.secondary)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(.horizontal, 18)
-                    .padding(.vertical, 10)
-                    .background(.bar)
-            }
-            .navigationTitle("Table Categories")
-            .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button("Done") { dismiss() }
-                }
-                ToolbarItem(placement: .primaryAction) {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("Column categories")
+                .font(.headline)
+            Text("Table columns get room in proportion to the weight of the first category whose words match the header. Other supplies the weight for unmatched headers; if removed, the fallback weight is 1.0. Drag rows to change the order.")
+                .font(.callout)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+
+            categoryTable
+
+            HStack(spacing: 8) {
+                ControlGroup {
                     Button {
-                        addCategory()
+                        editorRequest = CategoryEditorRequest(category: MarkdownTableColumnConfiguration.newCategory(), isNew: true)
                     } label: {
-                        Label("Add Category", systemImage: "plus")
+                        Image(systemName: "plus")
                     }
-                    .help("Add a new table column category")
+                    .help("Add a category")
+                    .accessibilityLabel("Add Category")
+
+                    Button {
+                        removeSelected()
+                    } label: {
+                        Image(systemName: "minus")
+                    }
+                    .disabled(selectedCategory?.canBeRemoved != true)
+                    .help("Remove the selected category")
+                    .accessibilityLabel("Remove Category")
                 }
+                .fixedSize()
+
+                Spacer()
+
+                Button("Edit Category…") {
+                    editSelected()
+                }
+                .disabled(selectedCategory == nil)
+
+                Button("Restore Defaults") {
+                    isConfirmingRestore = true
+                }
+                .disabled(configuration.isDefault)
             }
         }
-        .frame(minWidth: 480, minHeight: 560)
+        .padding(20)
+        .background {
+            // ⌥↑ / ⌥↓ move the selected category (also listed in the row menu).
+            Group {
+                Button("Move Up") { moveSelected(by: -1) }
+                    .keyboardShortcut(.upArrow, modifiers: .option)
+                Button("Move Down") { moveSelected(by: 1) }
+                    .keyboardShortcut(.downArrow, modifiers: .option)
+            }
+            .opacity(0)
+            .accessibilityHidden(true)
+        }
+        .sheet(item: $editorRequest) { request in
+            TableColumnCategoryEditorView(category: request.category, isNew: request.isNew) { category in
+                settings.tableColumnConfiguration = configuration.savingCategory(category)
+                selectedID = category.id
+            }
+        }
+        .confirmationDialog("Restore the default column categories?", isPresented: $isConfirmingRestore) {
+            Button("Restore Defaults", role: .destructive) {
+                settings.tableColumnConfiguration = .defaults
+                selectedID = nil
+            }
+        } message: {
+            Text("Your categories, weights, and match words are replaced by the defaults.")
+        }
     }
 
-    private func addCategory() {
-        var configuration = settings.tableColumnConfiguration
-        configuration.categories.append(
-            MarkdownTableColumnCategory(
-                id: UUID().uuidString.lowercased(),
-                name: "New Category",
-                weight: 1.0,
-                words: []
-            )
-        )
-        settings.tableColumnConfiguration = configuration
+    // Alternating stripes continue past the last row and the bottom one is clipped by the
+    // buttons; selection alone marks rows.
+    @ViewBuilder private var categoryTable: some View {
+        if #available(macOS 14, *) {
+            baseCategoryTable.alternatingRowBackgrounds(.disabled)
+        } else {
+            baseCategoryTable
+        }
     }
 
-    private func moveCategory(id: String, by offset: Int) {
-        var configuration = settings.tableColumnConfiguration
-        guard let index = configuration.categories.firstIndex(where: { $0.id == id }) else { return }
-        let destination = index + offset
-        guard configuration.categories.indices.contains(destination) else { return }
-        configuration.categories.swapAt(index, destination)
-        settings.tableColumnConfiguration = configuration
+    private var baseCategoryTable: some View {
+        Table(of: MarkdownTableColumnCategory.self, selection: $selectedID) {
+            TableColumn("Category") { category in
+                Text(category.name.isEmpty ? "Untitled Category" : category.name)
+            }
+            TableColumn("Weight") { category in
+                Text(category.weight.formatted(.number.precision(.fractionLength(0...3))))
+                    .monospacedDigit()
+            }
+            .width(70)
+            TableColumn("Match words") { category in
+                Text("\(category.words.count)")
+                    .monospacedDigit()
+            }
+            .width(90)
+        } rows: {
+            ForEach(configuration.categories) { category in
+                TableRow(category)
+                    .itemProvider {
+                        NSItemProvider(object: category.id as NSString)
+                    }
+            }
+            .dropDestination(for: String.self) { index, ids in
+                settings.tableColumnConfiguration = configuration.movingCategories(withIDs: ids, to: index)
+            }
+        }
+        .contextMenu(forSelectionType: String.self) { ids in
+            if let id = ids.first, let category = configuration.category(withID: id) {
+                Button("Edit Category…") {
+                    editorRequest = CategoryEditorRequest(category: category, isNew: false)
+                }
+                Divider()
+                Button("Move Up") {
+                    settings.tableColumnConfiguration = configuration.movingCategory(withID: id, by: -1)
+                }
+                .keyboardShortcut(.upArrow, modifiers: .option)
+                .disabled(configuration.categories.first?.id == id)
+                Button("Move Down") {
+                    settings.tableColumnConfiguration = configuration.movingCategory(withID: id, by: 1)
+                }
+                .keyboardShortcut(.downArrow, modifiers: .option)
+                .disabled(configuration.categories.last?.id == id)
+                Divider()
+                Button("Remove") {
+                    settings.tableColumnConfiguration = configuration.removingCategory(withID: id)
+                }
+                .disabled(!category.canBeRemoved)
+            }
+        } primaryAction: { ids in
+            if let id = ids.first, let category = configuration.category(withID: id) {
+                editorRequest = CategoryEditorRequest(category: category, isNew: false)
+            }
+        }
+        .onDeleteCommand(perform: removeSelected)
     }
 
-    private func removeCategory(id: String) {
-        var configuration = settings.tableColumnConfiguration
-        guard let index = configuration.categories.firstIndex(where: { $0.id == id }),
-              configuration.categories[index].canBeRemoved else { return }
-        configuration.categories.remove(at: index)
-        settings.tableColumnConfiguration = configuration
+    private func editSelected() {
+        guard let category = selectedCategory else { return }
+        editorRequest = CategoryEditorRequest(category: category, isNew: false)
+    }
+
+    private func removeSelected() {
+        guard let id = selectedID, configuration.category(withID: id)?.canBeRemoved == true else { return }
+        settings.tableColumnConfiguration = configuration.removingCategory(withID: id)
+        selectedID = nil
+    }
+
+    private func moveSelected(by offset: Int) {
+        guard let id = selectedID else { return }
+        settings.tableColumnConfiguration = configuration.movingCategory(withID: id, by: offset)
     }
 }
 
+private struct CategoryEditorRequest: Identifiable {
+    let category: MarkdownTableColumnCategory
+    let isNew: Bool
+    var id: String { category.id }
+}
+
+/// Edits a copy of one category; Done saves it, Cancel discards it.
 private struct TableColumnCategoryEditorView: View {
-    @ObservedObject var settings: SettingsManager
-    let categoryID: String
+    let isNew: Bool
+    let onSave: (MarkdownTableColumnCategory) -> Void
+    @Environment(\.dismiss) private var dismiss
+    @State private var draft: MarkdownTableColumnCategory
     @State private var newWord = ""
 
-    private var category: Binding<MarkdownTableColumnCategory> {
-        Binding(
-            get: {
-                settings.tableColumnConfiguration.categories.first(where: { $0.id == categoryID })
-                    ?? MarkdownTableColumnCategory(id: categoryID, name: "Category", weight: 1.0, words: [])
-            },
-            set: { updatedCategory in
-                var configuration = settings.tableColumnConfiguration
-                guard let index = configuration.categories.firstIndex(where: { $0.id == categoryID }) else { return }
-                configuration.categories[index] = updatedCategory
-                settings.tableColumnConfiguration = configuration
-            }
-        )
+    init(category: MarkdownTableColumnCategory, isNew: Bool, onSave: @escaping (MarkdownTableColumnCategory) -> Void) {
+        self.isNew = isNew
+        self.onSave = onSave
+        _draft = State(initialValue: category)
     }
 
-    private var weight: Binding<Double> {
-        Binding(
-            get: { category.wrappedValue.weight },
-            set: { value in
-                guard value.isFinite, value > 0 else { return }
-                category.wrappedValue.weight = value
-            }
-        )
+    private var isValid: Bool {
+        draft.weight.isFinite && draft.weight > 0
     }
 
     private var normalizedNewWord: String? {
@@ -426,65 +431,85 @@ private struct TableColumnCategoryEditorView: View {
 
     var body: some View {
         Form {
-            Section("Category") {
-                TextField("Name", text: category.name)
-                HStack {
-                    Text("Weight")
-                    Spacer()
-                    TextField("Weight", value: weight, format: .number.precision(.fractionLength(0...3)))
-                        .multilineTextAlignment(.trailing)
-                        .frame(width: 110)
-                }
+            Section {
+                TextField("Name", text: $draft.name)
+                TextField("Weight", value: $draft.weight, format: .number.precision(.fractionLength(0...3)))
+            } header: {
+                Text(isNew ? "New Category" : "Category")
+            } footer: {
                 Text("Higher weights give matching columns more room.")
-                    .font(.system(size: 11))
-                    .foregroundStyle(.secondary)
             }
 
             Section {
-                if category.wrappedValue.words.isEmpty {
+                if draft.words.isEmpty {
                     Text("No matching words")
                         .foregroundStyle(.secondary)
                 } else {
-                    ForEach(Array(category.wrappedValue.words.enumerated()), id: \.offset) { index, word in
+                    ForEach(Array(draft.words.enumerated()), id: \.offset) { index, word in
                         HStack {
                             Text(word)
                             Spacer()
                             Button {
-                                category.wrappedValue.words.remove(at: index)
+                                draft.words.remove(at: index)
                             } label: {
                                 Image(systemName: "minus.circle.fill")
                                     .foregroundStyle(.secondary)
                             }
                             .buttonStyle(.borderless)
+                            .help("Remove \(word)")
                             .accessibilityLabel("Remove \(word)")
                         }
                     }
                 }
 
                 HStack {
-                    TextField("Add one word", text: $newWord)
+                    TextField("Add word", text: $newWord, prompt: Text("Add one word"))
+                        .labelsHidden()
                         .onSubmit(addWord)
                     Button("Add", action: addWord)
                         .disabled(normalizedNewWord == nil)
                 }
             } header: {
-                Text("Matching words")
+                Text("Matching Words")
             } footer: {
                 Text("Matching uses whole words from table headers. Add one word at a time.")
             }
         }
         .formStyle(.grouped)
-        .navigationTitle(category.wrappedValue.name.isEmpty ? "Category" : category.wrappedValue.name)
+        .frame(width: 440, height: 380)
+        .toolbar {
+            ToolbarItem(placement: .cancellationAction) {
+                Button("Cancel") {
+                    dismiss()
+                }
+            }
+            ToolbarItem(placement: .confirmationAction) {
+                Button("Done", action: save)
+                    .disabled(!isValid)
+            }
+        }
+    }
+
+    private func save() {
+        // Commit a weight still being typed: a number field updates its binding only when
+        // editing ends. A word typed but not added yet is added too.
+        NSApp.keyWindow?.makeFirstResponder(nil)
+        DispatchQueue.main.async {
+            guard isValid else { return }
+            addWord()
+            onSave(draft)
+            dismiss()
+        }
     }
 
     private func addWord() {
         guard let word = normalizedNewWord else { return }
-        let existing = category.wrappedValue.words
+        let existing = draft.words
         guard !existing.contains(where: { MarkdownTableColumnLayout.tokens(in: $0).contains(word) }) else {
             newWord = ""
             return
         }
-        category.wrappedValue.words.append(word)
+        draft.words.append(word)
         newWord = ""
     }
 }

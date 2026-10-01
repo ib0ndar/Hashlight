@@ -45,11 +45,11 @@ enum HelpHTML {
 
         <h2>Opening Files</h2>
         <ul>
-            <li>Press <kbd>⌘O</kbd> to open files</li>
+            <li>Press <kbd>⌘O</kbd> or the Open button in the toolbar to open files</li>
             <li>Drag and drop <code>.md</code> files onto the app</li>
             <li>Double-click Markdown files in Finder</li>
             <li>Access recent files from <strong>File → Open Recent</strong></li>
-            <li>Open a folder with <kbd>⌘⌥O</kbd> to browse its Markdown files in the sidebar</li>
+            <li>Open a folder with <kbd>⌘⌥O</kbd> to browse its Markdown files in the sidebar's <strong>Files</strong> view</li>
         </ul>
 
         <h2>Working with Tabs</h2>
@@ -63,46 +63,48 @@ enum HelpHTML {
 
         <h2>Finding Your Way</h2>
         <ul>
-            <li><kbd>⌘F</kbd> - Find in the rendered document; <kbd>⌘G</kbd> and <kbd>⌘⇧G</kbd> move between matches</li>
+            <li><kbd>⌘F</kbd> - Find in the rendered document with the search field in the toolbar; <kbd>Return</kbd> or <kbd>⌘G</kbd> goes to the next match, <kbd>⌘⇧G</kbd> to the previous one, and <kbd>ESC</kbd> clears the search</li>
             <li><kbd>⌘⇧O</kbd> - Quick Open: jump to a file or heading</li>
             <li><kbd>⌃⇧F</kbd> - Search in Folder: find text across the open folder and open the file at that match</li>
             <li><kbd>⌘K</kbd> - Command palette</li>
-            <li>The outline button in the tab bar shows the document's headings; click one to jump to it</li>
-            <li><kbd>⌘⇧F</kbd> - Focus mode hides everything but the document; press <kbd>ESC</kbd> to leave it</li>
+            <li>The sidebar switches between <strong>Files</strong> (<kbd>⌘⌥1</kbd>), the open folder's Markdown files, and <strong>Outline</strong> (<kbd>⌘⌥2</kbd>), the document's headings; click a heading to jump to it. Show or hide the sidebar with the toolbar's sidebar button or <kbd>⌃⌘S</kbd>, and drag its edge to resize it</li>
+            <li><kbd>⌘⇧F</kbd> - Focus mode hides everything but the document; press <kbd>ESC</kbd> or the Exit Focus Mode button at the top to leave it</li>
         </ul>
 
         <h2>Files That Change</h2>
         <p>When another app saves an open file, its tab reloads automatically and keeps your reading position. If the file is deleted, Hashlight asks before closing the tab. <kbd>⌘R</kbd> reloads the current tab by hand.</p>
 
         <h2>Customizing Appearance</h2>
-        <p>Press <kbd>⌘,</kbd> to open Settings.</p>
-        <h3>Application Appearance</h3>
+        <p>Press <kbd>⌘,</kbd> to open Settings. It has three panes: <strong>General</strong> (appearance and Dock icon), <strong>Preview</strong> (themes, fonts, and layout), and <strong>Tables</strong> (column categories). Settings reopens on the pane you used last.</p>
+        <h3>Application Appearance (General)</h3>
         <ul>
             <li><strong>System</strong> - Follows macOS appearance</li>
             <li><strong>Light</strong> - Always light mode</li>
             <li><strong>Dark</strong> - Always dark mode</li>
         </ul>
-        <h3>Dock Icon</h3>
+        <h3>Dock Icon (General)</h3>
         <ul>
             <li><strong>System</strong> - Leaves the icon to macOS. On macOS 26 it follows the icon style in System Settings → Appearance; on earlier versions it shows Frost in Light mode and Ember in Dark mode.</li>
             <li><strong>Frost</strong> - Always the light icon</li>
             <li><strong>Ember</strong> - Always the dark icon</li>
         </ul>
-        <p>The choice changes the icon in the Dock, the app switcher, the welcome screen, and About while Hashlight runs. Finder keeps the standard icon.</p>
-        <h3>Markdown Preview Theme</h3>
+        <p>The choice changes the icon in the Dock, the app switcher, the welcome screen, and Hashlight → About Hashlight while Hashlight runs. Finder keeps the standard icon.</p>
+        <h3>Markdown Preview Theme (Preview)</h3>
         <p>Use the <strong>Light mode</strong> and <strong>Dark mode</strong> menus to choose a
         separate Base16 theme for each appearance. The preview switches between them automatically
         when the effective application appearance changes.</p>
-        <h3>Preview Fonts</h3>
+        <h3>Preview Fonts (Preview)</h3>
         <ul>
             <li><strong>Main font</strong> - Proportional font used for headings, paragraphs, lists, and tables</li>
             <li><strong>Fixed font</strong> - Monospaced font used for fenced code blocks and inline commands</li>
         </ul>
         <h3>Layout and Zoom</h3>
-        <p>Set the text column's alignment, width and page margin in Settings or from the status bar. Zoom with <kbd>⌘=</kbd>, <kbd>⌘-</kbd> and <kbd>⌘0</kbd>, or pinch on a trackpad.</p>
+        <p>Set the text column's alignment, width and page margin in Settings → Preview or from the status bar. Zoom with <kbd>⌘=</kbd>, <kbd>⌘-</kbd> and <kbd>⌘0</kbd> (View menu), the status bar, or pinch on a trackpad.</p>
+        <h3>Table Columns (Tables)</h3>
+        <p>Table columns get room in proportion to the weight of the first category whose words match the column header. Add, remove, edit, and reorder categories (drag a row, or <kbd>⌥↑</kbd> / <kbd>⌥↓</kbd>); <strong>Restore Defaults</strong> brings back the built-in set.</p>
 
         <h2>Exporting Documents</h2>
-        <p>Export via <strong>File → Export</strong>:</p>
+        <p>Export via <strong>File → Export</strong> or the Export button in the toolbar:</p>
         <ul>
             <li><strong>PDF</strong> - Formatted with pagination</li>
             <li><strong>HTML</strong> - With or without styles</li>
@@ -124,6 +126,8 @@ enum HelpHTML {
             <tr><td><kbd>⌘F</kbd></td><td>Find</td></tr>
             <tr><td><kbd>⌘G</kbd> / <kbd>⌘⇧G</kbd></td><td>Next / previous match</td></tr>
             <tr><td><kbd>⌘⇧F</kbd></td><td>Focus mode</td></tr>
+            <tr><td><kbd>⌃⌘S</kbd></td><td>Show / hide the sidebar</td></tr>
+            <tr><td><kbd>⌘⌥1</kbd> / <kbd>⌘⌥2</kbd></td><td>Sidebar: Files / Outline</td></tr>
             <tr><td><kbd>⌘P</kbd></td><td>Print</td></tr>
             <tr><td><kbd>⌘=</kbd> / <kbd>⌘-</kbd> / <kbd>⌘0</kbd></td><td>Zoom in / out / reset</td></tr>
             <tr><td><kbd>⌘,</kbd></td><td>Settings</td></tr>

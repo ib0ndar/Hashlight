@@ -8,10 +8,13 @@ Written 2026-09-30.
 
 Hashlight is a native, read-only Markdown viewer for macOS 13+ (Swift 6, SwiftUI + AppKit, an
 `NSTextView` renderer). It started as zMD Viewer, a read-only edition of the zMD editor, and is now
-an independent project with its own identity, icon, and repository. The code builds, all 104 tests
-pass locally (Xcode 27) and on hosted CI (Xcode 26.6), and the official icon is wired in. Plan 003
-added a Dock icon setting (System / Frost / Ember) on every macOS version. **Next task:** none
-planned; see "Open decisions" below.
+an independent project with its own identity, icon, and repository. The code builds, the official
+icon is wired in, and plan 003 added a Dock icon setting (System / Frost / Ember) on every macOS
+version. Plan 004 (2026-09-30) adopted the Liquid Glass design: a `NavigationSplitView` window with
+one sidebar navigator (Files / Outline) and a real toolbar (Open, Focus Mode, Export, Find), three
+Settings panes (General · Preview · Tables), and the standard About panel. All 121 tests pass
+locally (Xcode 27); plan 004 is not committed yet and has not run on hosted CI (Xcode 26.6).
+**Next task:** none planned; see "Open decisions" below.
 
 ## Where everything is
 
@@ -22,7 +25,7 @@ planned; see "Open decisions" below.
 | CI | `.github/workflows/ci.yml`: build and test on pushes to and PRs into `main`, runner `macos-26` (Xcode 26.6). Dependabot is on for GitHub Actions. |
 | Agent rules | `AGENTS.md`: identity, build/test commands, registration hygiene, Finder safety, release rules, known issues |
 | Architecture guide | `CLAUDE.md` |
-| Plans | `plans/` (001 create, 002 icon, 003 Dock icon setting) |
+| Plans | `plans/` (001 create, 002 icon, 003 Dock icon setting, 004 Liquid Glass) |
 | Official icon and brand | `design/` (start with `design/BRIEF.md`); compiled icon `Hashlight/Hashlight.icon` |
 | Manual-test documents | `fixtures/` (see `fixtures/README.md`) |
 | Scratch output (ignored) | `artifacts/`: screenshots of the Hashlight checks (`artifacts/screens/`) and build/test logs. Not in git. |
@@ -38,7 +41,8 @@ planned; see "Open decisions" below.
 - Project `Hashlight.xcodeproj`; targets `Hashlight`, `HashlightQuickLook`, `HashlightTests`;
   scheme and module `Hashlight`.
 - License: MIT. `LICENSE.md` keeps Zachary Rossmiller's (zMD) notice and adds Ivan Bondar's line;
-  keep the attribution (`THIRD_PARTY_NOTICES.md`, "Based on zMD" in Settings → About).
+  keep the attribution (`THIRD_PARTY_NOTICES.md`, "Based on zMD" in the About panel, from
+  `Hashlight/Credits.rtf`).
 
 ## How we got here
 
@@ -55,7 +59,8 @@ planned; see "Open decisions" below.
    - `c16a2ad` renames everything;
    - `518c4a2` rewrites the docs;
    - `7333e6b` wires in the official icon (plans 001 and 002);
-   - plan 003 adds the Dock icon setting.
+   - plan 003 adds the Dock icon setting;
+   - plan 004 adopts Liquid Glass: navigator sidebar, toolbar, three Settings panes, About panel.
 
 ## What the product does (and must keep doing)
 
@@ -67,10 +72,14 @@ planned; see "Open decisions" below.
   file asks before its tab closes.
 - Find searches the rendered text (literal, case-insensitive). Folder search (⌃⇧F) opens a hit on
   its exact match.
-- Other features: tabs, outline, Quick Open (⌘⇧O), command palette (⌘K), focus mode, themes (351
-  Base16 palettes) and fonts, Mermaid and KaTeX, and export to PDF, HTML, DOCX, and RTF plus
-  print.
-- A Dock icon setting (Settings → Appearance → Icon: System / Frost / Ember) on every macOS
+- The window: a sidebar navigator that switches between Files (⌘⌥1) and Outline (⌘⌥2) and hides
+  with ⌃⌘S; a toolbar with Open, Focus Mode, Export, and Find (⌘F focuses its search field);
+  document tabs as a plain strip; a status bar at the bottom.
+- Other features: tabs, Quick Open (⌘⇧O), command palette (⌘K), focus mode, themes (351 Base16
+  palettes) and fonts, Mermaid and KaTeX, and export to PDF, HTML, DOCX, and RTF plus print.
+- Settings has three panes (General, Preview, Tables) and reopens on the last one. About is the
+  standard App-menu panel.
+- A Dock icon setting (Settings → General → Dock icon: System / Frost / Ember) on every macOS
   version. System leaves the icon to macOS; the welcome screen and About show the chosen icon.
 - A Quick Look extension renders Markdown in Finder.
 - There is no updater and no published release yet.
@@ -78,7 +87,7 @@ planned; see "Open decisions" below.
 ## Build, test, check
 
 ```bash
-./scripts/xcodebuild-hashlight.sh -configuration Debug test          # 104 tests
+./scripts/xcodebuild-hashlight.sh -configuration Debug test          # 121 tests
 ./scripts/xcodebuild-hashlight.sh -configuration Release \
   CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY='' DEVELOPMENT_TEAM='' build
 xcrun xcresulttool get test-results summary --path "$(ls -td build/Xcode/DerivedData/Logs/Test/*.xcresult | head -1)"
@@ -99,6 +108,23 @@ Recording permission. The Debug app's name for it is **"Hashlight Debug"**.
 
 - **Launch** with `open -a "$PWD/build/Xcode/Debug/Hashlight.app" "$PWD/fixtures/rendering-check.md"`.
   Launching registers the app; unregister afterwards.
+- **Names:** agent-desktop calls the app "Hashlight Debug"; System Events calls its process
+  "Hashlight" (`tell process "Hashlight"`), and the app menu is `menu 1 of menu bar item 2`.
+- **Keys:** confirm the app is frontmost before System Events keystrokes (check the frontmost
+  process's bundle identifier); the first key after activating the app is sometimes lost. On this
+  Mac, uppercase letters sent with `keystroke` arrive as Cyrillic characters (input sources): type
+  lowercase test input, or set values through Accessibility. `agent-desktop press cmd+comma` does
+  not open Settings; click the app menu's "Settings…" item.
+- **Screenshots can show the previous frame.** Wait a second and take the screenshot twice before
+  judging a state change; the View menu's "Focus Mode"/"Exit Focus Mode" title is a reliable state
+  probe.
+- **What agent-desktop cannot reach:** document tabs (their buttons sit in a horizontal scroll view
+  and report "offscreen"; click them by coordinates with `--headed mouse-click --xy`) and controls
+  inside sheets (Settings' category editor, Help, confirmation dialogs: a process-identity mismatch
+  makes their refs stale). Use System Events for sheets, for example
+  `click button 2 of group 1 of sheet 1 of window "Tables"` (Done).
+- **Open panel:** driving NSOpenPanel's Go-to-folder field by script was unreliable (autocomplete);
+  use the folder-seeding XCTest below instead.
 - **Quit** with `osascript -e 'tell application id "io.github.ib0ndar.hashlight.debug" to quit'`;
   agent-desktop blocks `cmd+q`.
 - **Screenshots:** `agent-desktop screenshot --app "Hashlight Debug" artifacts/screens/NAME.png`.
@@ -141,8 +167,13 @@ Recording permission. The Debug app's name for it is **"Hashlight Debug"**.
   hand-tuned small sizes. Apple's tooling makes the compiled icon win everywhere. See plan 002.
   While Hashlight runs, the Dock icon setting (plan 003) shows the designer's `.icns` in the Dock.
 - **Dock icon setting on macOS 13–15:** never run on those systems (no machine); unit tests only.
-- **Settings window height:** the Appearance tab is taller than its fixed 480 × 620 pt window on
-  macOS 26 and scrolls (Zoom and Advanced were already below the fold before plan 003).
+- **Status bar scroll-edge effect on macOS 26** depends on the AppKit view hierarchy SwiftUI's
+  `NavigationSplitView` builds (`StatusBarAccessory.swift` looks for the detail
+  `NSSplitViewItem`). If a macOS update changes that hierarchy the bar falls back to a plain inset
+  without the effect; check `plan004-34-statusbar-accessory-light.png` for the intended look.
+- **Liquid Glass variants and accessibility:** plan 004 was checked in Light and Dark only; System
+  Settings' Liquid Glass Clear/Tinted, Reduce Transparency, and Increase Contrast were not changed
+  on the owner's Mac and still need a look.
 - **`xcodebuild clean`** via the wrapper fails ("Could not delete build/Xcode because it was not
   created by the build system"). To force a clean product, delete the product under
   `build/Xcode/<Config>/` instead. Inherited build layout.
@@ -164,6 +195,8 @@ Recording permission. The Debug app's name for it is **"Hashlight Debug"**.
   - registering `hashlight.app`. The brief suggests the bundle ID `app.hashlight.Hashlight`; the
     owner chose `io.github.ib0ndar.hashlight`, and changing it would reset users' settings.
 - **Amber accent colour:** the brief suggests it for the UI; the app still uses the system accent.
+- **Toolbar Open button placement:** plan 004 put it at `.navigation` (leading, before the title);
+  the approved A1 mock-up showed it with the trailing items. One line to change if preferred.
 - **First release:** version, tag, and GitHub release process (see `AGENTS.md`, "Versions, DMGs,
   and releases").
 

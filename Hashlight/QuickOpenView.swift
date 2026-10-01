@@ -97,8 +97,8 @@ class QuickOpenNSView: NSView {
     }
 
     private func setupUI() {
+        // Transparent: the SwiftUI overlay supplies the panel background (glass or material).
         wantsLayer = true
-        layer?.backgroundColor = NSColor.windowBackgroundColor.cgColor
         layer?.cornerRadius = 12
 
         let container = NSStackView()
@@ -147,6 +147,7 @@ class QuickOpenNSView: NSView {
         scrollView.hasVerticalScroller = true
         scrollView.autohidesScrollers = true
         scrollView.borderType = .noBorder
+        scrollView.drawsBackground = false
         scrollView.backgroundColor = .clear
 
         tableView = NSTableView()
@@ -661,7 +662,9 @@ struct QuickOpenOverlay: View {
     var body: some View {
         ZStack {
             if isPresented {
-                Color.black.opacity(0.4)
+                // Clicking outside dismisses. No dimming: the panel separates itself.
+                Color.clear
+                    .contentShape(Rectangle())
                     .ignoresSafeArea()
                     .onTapGesture {
                         isPresented = false
@@ -674,9 +677,8 @@ struct QuickOpenOverlay: View {
                         .environmentObject(documentManager)
                         .environmentObject(folderManager)
                         .frame(width: 500, height: 350)
-                        .background(Color(NSColor.windowBackgroundColor))
                         .clipShape(RoundedRectangle(cornerRadius: 12))
-                        .shadow(color: .black.opacity(0.3), radius: 20, x: 0, y: 10)
+                        .floatingPanelBackground()
                     Spacer()
                 }
                 .padding(.top, 80)

@@ -10,8 +10,6 @@
 		F60000000000000000000003 /* HelpHTML.swift in Sources */ = {isa = PBXBuildFile; fileRef = F60000000000000000000002 /* HelpHTML.swift */; };
 		F60000000000000000000011 /* DropHandler.swift in Sources */ = {isa = PBXBuildFile; fileRef = F60000000000000000000010 /* DropHandler.swift */; };
 		F60000000000000000000013 /* WelcomeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F60000000000000000000012 /* WelcomeView.swift */; };
-		F60000000000000000000015 /* PressableButtonStyle.swift in Sources */ = {isa = PBXBuildFile; fileRef = F60000000000000000000014 /* PressableButtonStyle.swift */; };
-		F60000000000000000000017 /* RecentFileButtonStyle.swift in Sources */ = {isa = PBXBuildFile; fileRef = F60000000000000000000016 /* RecentFileButtonStyle.swift */; };
 		F60000000000000000000019 /* EmptyDocumentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F60000000000000000000018 /* EmptyDocumentView.swift */; };
 		F6000000000000000000001B /* NormalContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F6000000000000000000001A /* NormalContentView.swift */; };
 		F6000000000000000000001D /* FocusModeContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F6000000000000000000001C /* FocusModeContentView.swift */; };
@@ -34,13 +32,17 @@
 		A10000005 /* DocumentManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000004 /* DocumentManager.swift */; };
 
 		A10000009 /* TabBar.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000008 /* TabBar.swift */; };
-		A10000011 /* SearchBar.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000012 /* SearchBar.swift */; };
 		A1000000B /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = A1000000A /* Assets.xcassets */; };
 		7200000000000000000000A2 /* Hashlight.icon in Resources */ = {isa = PBXBuildFile; fileRef = 7200000000000000000000A1 /* Hashlight.icon */; };
 		7300000000000000000000A2 /* DockIconController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7300000000000000000000A1 /* DockIconController.swift */; };
 		7300000000000000000000A4 /* DockIcon-Frost.icns in Resources */ = {isa = PBXBuildFile; fileRef = 7300000000000000000000A3 /* DockIcon-Frost.icns */; };
 		7300000000000000000000A6 /* DockIcon-Ember.icns in Resources */ = {isa = PBXBuildFile; fileRef = 7300000000000000000000A5 /* DockIcon-Ember.icns */; };
 		7300000000000000000000A8 /* DockIconTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7300000000000000000000A7 /* DockIconTests.swift */; };
+		7400000000000000000000A2 /* NavigatorSidebar.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7400000000000000000000A1 /* NavigatorSidebar.swift */; };
+		7400000000000000000000A4 /* ViewerToolbar.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7400000000000000000000A3 /* ViewerToolbar.swift */; };
+		7400000000000000000000AA /* StatusBarAccessory.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7400000000000000000000A9 /* StatusBarAccessory.swift */; };
+		7400000000000000000000A6 /* Credits.rtf in Resources */ = {isa = PBXBuildFile; fileRef = 7400000000000000000000A5 /* Credits.rtf */; };
+		7400000000000000000000A8 /* SettingsModelTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7400000000000000000000A7 /* SettingsModelTests.swift */; };
 		A1000000D /* OutlineView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000000E /* OutlineView.swift */; };
 		A1000000F /* ExportManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000010 /* ExportManager.swift */; };
 		C1D2E3F4A5B6C70801020305 /* DirectoryWatcher.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1C2D3E4F5A6B70801020305 /* DirectoryWatcher.swift */; };
@@ -102,8 +104,6 @@
 		F60000000000000000000002 /* HelpHTML.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HelpHTML.swift; sourceTree = "<group>"; };
 		F60000000000000000000010 /* DropHandler.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DropHandler.swift; sourceTree = "<group>"; };
 		F60000000000000000000012 /* WelcomeView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WelcomeView.swift; sourceTree = "<group>"; };
-		F60000000000000000000014 /* PressableButtonStyle.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PressableButtonStyle.swift; sourceTree = "<group>"; };
-		F60000000000000000000016 /* RecentFileButtonStyle.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RecentFileButtonStyle.swift; sourceTree = "<group>"; };
 		F60000000000000000000018 /* EmptyDocumentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EmptyDocumentView.swift; sourceTree = "<group>"; };
 		F6000000000000000000001A /* NormalContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NormalContentView.swift; sourceTree = "<group>"; };
 		F6000000000000000000001C /* FocusModeContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FocusModeContentView.swift; sourceTree = "<group>"; };
@@ -125,13 +125,17 @@
 		A10000004 /* DocumentManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DocumentManager.swift; sourceTree = "<group>"; };
 
 		A10000008 /* TabBar.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TabBar.swift; sourceTree = "<group>"; };
-		A10000012 /* SearchBar.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SearchBar.swift; sourceTree = "<group>"; };
 		A1000000A /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		7200000000000000000000A1 /* Hashlight.icon */ = {isa = PBXFileReference; lastKnownFileType = folder.iconcomposer.icon; path = Hashlight.icon; sourceTree = "<group>"; };
 		7300000000000000000000A1 /* DockIconController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DockIconController.swift; sourceTree = "<group>"; };
 		7300000000000000000000A3 /* DockIcon-Frost.icns */ = {isa = PBXFileReference; lastKnownFileType = image.icns; path = "DockIcon-Frost.icns"; sourceTree = "<group>"; };
 		7300000000000000000000A5 /* DockIcon-Ember.icns */ = {isa = PBXFileReference; lastKnownFileType = image.icns; path = "DockIcon-Ember.icns"; sourceTree = "<group>"; };
 		7300000000000000000000A7 /* DockIconTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DockIconTests.swift; sourceTree = "<group>"; };
+		7400000000000000000000A1 /* NavigatorSidebar.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NavigatorSidebar.swift; sourceTree = "<group>"; };
+		7400000000000000000000A3 /* ViewerToolbar.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ViewerToolbar.swift; sourceTree = "<group>"; };
+		7400000000000000000000A9 /* StatusBarAccessory.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StatusBarAccessory.swift; sourceTree = "<group>"; };
+		7400000000000000000000A5 /* Credits.rtf */ = {isa = PBXFileReference; lastKnownFileType = text.rtf; path = Credits.rtf; sourceTree = "<group>"; };
+		7400000000000000000000A7 /* SettingsModelTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsModelTests.swift; sourceTree = "<group>"; };
 		A1000000C /* Hashlight.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = Hashlight.entitlements; sourceTree = "<group>"; };
 		A1000000E /* OutlineView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OutlineView.swift; sourceTree = "<group>"; };
 		A10000010 /* ExportManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ExportManager.swift; sourceTree = "<group>"; };
@@ -201,10 +205,11 @@
 				F60000000000000000000002 /* HelpHTML.swift */,
 				F60000000000000000000010 /* DropHandler.swift */,
 				F60000000000000000000012 /* WelcomeView.swift */,
-				F60000000000000000000014 /* PressableButtonStyle.swift */,
-				F60000000000000000000016 /* RecentFileButtonStyle.swift */,
 				F60000000000000000000018 /* EmptyDocumentView.swift */,
 				F6000000000000000000001A /* NormalContentView.swift */,
+				7400000000000000000000A1 /* NavigatorSidebar.swift */,
+				7400000000000000000000A3 /* ViewerToolbar.swift */,
+				7400000000000000000000A9 /* StatusBarAccessory.swift */,
 				F6000000000000000000001C /* FocusModeContentView.swift */,
 				F60000000000000000000020 /* DocumentViewModeContent.swift */,
 				A10000000 /* HashlightApp.swift */,
@@ -213,7 +218,6 @@
 				A10000004 /* DocumentManager.swift */,
 
 				A10000008 /* TabBar.swift */,
-				A10000012 /* SearchBar.swift */,
 				A1000000E /* OutlineView.swift */,
 				A10000010 /* ExportManager.swift */,
 				F1A2B3C4D5E6F7080 /* AlertManager.swift */,
@@ -233,6 +237,7 @@
 				7300000000000000000000A3 /* DockIcon-Frost.icns */,
 				7300000000000000000000A5 /* DockIcon-Ember.icns */,
 				7300000000000000000000A1 /* DockIconController.swift */,
+				7400000000000000000000A5 /* Credits.rtf */,
 				A1000000C /* Hashlight.entitlements */,
 
 				7B3F07EF007F429AB9E72113 /* SettingsManager.swift */,
@@ -268,6 +273,7 @@ A1111111 /* Hashlight.app */,
 				710000000000000000000003 /* PreviewThemeTests.swift */,
 				710000000000000000000007 /* PreviewFontTests.swift */,
 				7300000000000000000000A7 /* DockIconTests.swift */,
+				7400000000000000000000A7 /* SettingsModelTests.swift */,
 			);
 			path = HashlightTests;
 			sourceTree = "<group>";
@@ -390,6 +396,7 @@ A1111111 /* Hashlight.app */,
 				7200000000000000000000A2 /* Hashlight.icon in Resources */,
 				7300000000000000000000A4 /* DockIcon-Frost.icns in Resources */,
 				7300000000000000000000A6 /* DockIcon-Ember.icns in Resources */,
+				7400000000000000000000A6 /* Credits.rtf in Resources */,
 			
 				2208643A1E114A2C9A4C7331 /* Resources in Resources */,
 			);
@@ -412,8 +419,6 @@ A1111111 /* Hashlight.app */,
 				F60000000000000000000003 /* HelpHTML.swift in Sources */,
 				F60000000000000000000011 /* DropHandler.swift in Sources */,
 				F60000000000000000000013 /* WelcomeView.swift in Sources */,
-				F60000000000000000000015 /* PressableButtonStyle.swift in Sources */,
-				F60000000000000000000017 /* RecentFileButtonStyle.swift in Sources */,
 				F60000000000000000000019 /* EmptyDocumentView.swift in Sources */,
 				F6000000000000000000001B /* NormalContentView.swift in Sources */,
 				F6000000000000000000001D /* FocusModeContentView.swift in Sources */,
@@ -424,7 +429,6 @@ A1111111 /* Hashlight.app */,
 				A10000005 /* DocumentManager.swift in Sources */,
 
 				A10000009 /* TabBar.swift in Sources */,
-				A10000011 /* SearchBar.swift in Sources */,
 				A1000000D /* OutlineView.swift in Sources */,
 				A1000000F /* ExportManager.swift in Sources */,
 				F1A2B3C4D5E6F7081 /* AlertManager.swift in Sources */,
@@ -450,6 +454,9 @@ A1111111 /* Hashlight.app */,
 				C1D2E3F4A5B6C70801020307 /* FolderSidebarView.swift in Sources */,
 				BD144ED0929DCB16BE557ADC /* WebRenderer.swift in Sources */,
 				7300000000000000000000A2 /* DockIconController.swift in Sources */,
+				7400000000000000000000A2 /* NavigatorSidebar.swift in Sources */,
+				7400000000000000000000A4 /* ViewerToolbar.swift in Sources */,
+				7400000000000000000000AA /* StatusBarAccessory.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -464,6 +471,7 @@ A1111111 /* Hashlight.app */,
 				710000000000000000000004 /* PreviewThemeTests.swift in Sources */,
 				710000000000000000000008 /* PreviewFontTests.swift in Sources */,
 				7300000000000000000000A8 /* DockIconTests.swift in Sources */,
+				7400000000000000000000A8 /* SettingsModelTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

@@ -98,6 +98,66 @@ nonisolated struct MarkdownTableColumnConfiguration: Codable, Equatable, Sendabl
     }
 }
 
+/// Editing operations for Settings → Tables. Each returns a new configuration and leaves the
+/// receiver unchanged when the edit does not apply. Category order is matching priority.
+nonisolated extension MarkdownTableColumnConfiguration {
+    var isDefault: Bool {
+        self == .defaults
+    }
+
+    static func newCategory() -> MarkdownTableColumnCategory {
+        MarkdownTableColumnCategory(id: UUID().uuidString.lowercased(), name: "New Category", weight: 1.0, words: [])
+    }
+
+    func category(withID id: String) -> MarkdownTableColumnCategory? {
+        categories.first(where: { $0.id == id })
+    }
+
+    /// Appends `category`, or replaces the category with the same id.
+    func savingCategory(_ category: MarkdownTableColumnCategory) -> MarkdownTableColumnConfiguration {
+        var updated = self
+        if let index = updated.categories.firstIndex(where: { $0.id == category.id }) {
+            updated.categories[index] = category
+        } else {
+            updated.categories.append(category)
+        }
+        return Self.isValid(updated.categories) ? updated : self
+    }
+
+    /// Removes a category unless it is one of the built-in ones that cannot be removed.
+    func removingCategory(withID id: String) -> MarkdownTableColumnConfiguration {
+        guard let index = categories.firstIndex(where: { $0.id == id }),
+              categories[index].canBeRemoved else { return self }
+        var updated = self
+        updated.categories.remove(at: index)
+        return updated
+    }
+
+    /// Moves one category up (negative `offset`) or down (positive `offset`).
+    func movingCategory(withID id: String, by offset: Int) -> MarkdownTableColumnConfiguration {
+        guard let index = categories.firstIndex(where: { $0.id == id }),
+              categories.indices.contains(index + offset) else { return self }
+        var updated = self
+        let category = updated.categories.remove(at: index)
+        updated.categories.insert(category, at: index + offset)
+        return updated
+    }
+
+    /// Moves the categories with `ids` to `destination`, an insertion index into the current
+    /// order (what a drop between two rows reports). The moved categories keep their order.
+    func movingCategories(withIDs ids: [String], to destination: Int) -> MarkdownTableColumnConfiguration {
+        let moving = Set(ids)
+        let moved = categories.filter { moving.contains($0.id) }
+        guard !moved.isEmpty else { return self }
+        let clamped = min(max(destination, 0), categories.count)
+        let movedBeforeDestination = categories[..<clamped].filter { moving.contains($0.id) }.count
+        var updated = self
+        updated.categories.removeAll { moving.contains($0.id) }
+        updated.categories.insert(contentsOf: moved, at: clamped - movedBeforeDestination)
+        return updated
+    }
+}
+
 /// Shared preferences bridge between Hashlight and its sandboxed Quick Look extension.
 nonisolated enum MarkdownTableColumnPreferences {
 #if DEBUG

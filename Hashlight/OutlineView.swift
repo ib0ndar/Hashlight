@@ -1,50 +1,46 @@
 import SwiftUI
 
+/// The navigator's Outline mode: the document's headings as a sidebar list.
 struct OutlineView: View {
     let content: String
+    /// A scroll request for the preview, which clears it once it has scrolled.
     @Binding var selectedHeadingId: String?
 
     /// Cached outline so we don't re-parse the entire document on every SwiftUI body evaluation.
     /// Rebuilt only when `content` actually changes, debounced by SwiftUI's natural update cadence.
     @State private var headings: [OutlineItem] = []
+    /// The highlighted row. Kept apart from `selectedHeadingId`, which the preview resets.
+    @State private var selection: String?
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            // Header
-            HStack {
-                Image(systemName: "list.bullet.indent")
-                    .font(.system(size: 14))
-                    .foregroundStyle(.secondary)
-                Text("OUTLINE")
-                    .font(.system(size: 11, weight: .semibold))
-                    .foregroundStyle(.secondary)
-                Spacer()
-            }
-            .padding(.horizontal, 16)
-            .padding(.vertical, 12)
-
-            Divider()
-
-            // Outline items
-            ScrollView {
-                VStack(alignment: .leading, spacing: 2) {
-                    if headings.isEmpty {
-                        Text("No headings")
-                            .font(.system(size: 11))
-                            .foregroundStyle(Color.secondary.opacity(0.7))
-                            .padding(.horizontal, 16)
-                            .padding(.vertical, 8)
-                    } else {
-                        ForEach(headings) { item in
-                            OutlineItemView(item: item, selectedId: $selectedHeadingId)
-                        }
-                    }
-                }
-                .padding(.vertical, 8)
+        List(selection: $selection) {
+            ForEach(headings) { item in
+                Text(item.text)
+                    .fontWeight(item.level == 1 ? .medium : .regular)
+                    .lineLimit(1)
+                    .padding(.leading, CGFloat(item.level - 1) * 14)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .contentShape(Rectangle())
+                    // Clicking the already selected heading does not change the selection, but
+                    // it should still scroll back to it.
+                    .simultaneousGesture(TapGesture().onEnded {
+                        selectedHeadingId = item.id
+                    })
+                    .help(item.text)
+                    .tag(item.id)
             }
         }
-        .frame(width: 250)
-        .background(.ultraThinMaterial)
+        .listStyle(.sidebar)
+        .overlay {
+            if headings.isEmpty {
+                NavigatorPlaceholder(title: "No Headings", message: "Headings in the document appear here.")
+            }
+        }
+        .onChange(of: selection) { id in
+            if let id {
+                selectedHeadingId = id
+            }
+        }
         .onAppear { rebuildOutline() }
         .onChange(of: content) { _ in rebuildOutline() }
     }
@@ -56,6 +52,9 @@ struct OutlineView: View {
         headings = MarkdownParser.shared.extractHeadings(content).map {
             OutlineItem(id: $0.id, level: $0.level, text: $0.text)
         }
+        if let selection, !headings.contains(where: { $0.id == selection }) {
+            self.selection = nil
+        }
     }
 }
 
@@ -63,53 +62,6 @@ struct OutlineItem: Identifiable {
     let id: String
     let level: Int
     let text: String
-}
-
-struct OutlineItemView: View {
-    let item: OutlineItem
-    @Binding var selectedId: String?
-    @State private var isHovered = false
-
-    private var isActive: Bool {
-        selectedId == item.id
-    }
-
-    var body: some View {
-        Button(action: {
-            selectedId = item.id
-        }) {
-            HStack(spacing: 6) {
-                Text(item.text)
-                    .font(.system(size: fontSize))
-                    .foregroundStyle(isActive ? Color.primary : (isHovered ? Color.primary.opacity(0.8) : Color.secondary))
-                    .lineLimit(1)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-            }
-            .padding(.leading, CGFloat(12 + (item.level - 1) * 16))
-            .padding(.trailing, 12)
-            .padding(.vertical, 6)
-            .background(
-                RoundedRectangle(cornerRadius: 4)
-                    .fill(isActive ? Color.accentColor.opacity(0.1) : (isHovered ? Color.accentColor.opacity(0.06) : Color.clear))
-            )
-        }
-        .buttonStyle(PressableButtonStyle())
-        .onHover { hovering in
-            withAnimation(Motion.fast) {
-                isHovered = hovering
-            }
-        }
-        .padding(.horizontal, 8)
-    }
-
-    var fontSize: CGFloat {
-        switch item.level {
-        case 1: return 14
-        case 2: return 13
-        case 3: return 12
-        default: return 11
-        }
-    }
 }
 
 #Preview {

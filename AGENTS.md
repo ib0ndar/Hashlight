@@ -4,7 +4,8 @@ This file is the repository-specific source of truth for coding agents working o
 it before changing code, choosing a version number, creating a tag, or pushing anything.
 
 Start with `HANDOVER.md` for the current state, open decisions, and hands-on testing notes, and with
-`plans/README.md` for finished and upcoming work (plans 001–003 are done; no next task is planned).
+`plans/README.md` for finished and upcoming work (plans 001–004 are done; no next task is
+planned).
 
 ## Repository identity and origin
 
@@ -17,7 +18,8 @@ Start with `HANDOVER.md` for the current state, open decisions, and hands-on tes
   tree is identical to that commit. zMD's history stays in https://github.com/ib0ndar/zMD, and zMD
   itself is https://github.com/umzcio/zMD by Zachary Rossmiller.
 - Keep the attribution: the MIT notice for Zachary Rossmiller in `LICENSE.md`, the zMD section of
-  `THIRD_PARTY_NOTICES.md`, and the "Based on zMD" line in Settings → About.
+  `THIRD_PARTY_NOTICES.md`, and the "Based on zMD" line in the About panel (Hashlight → About
+  Hashlight, from `Hashlight/Credits.rtf`).
 - To bring a specific fix over from zMD, add a read-only remote and cherry-pick deliberately:
   `git remote add zmd https://github.com/ib0ndar/zMD.git && git remote set-url --push zmd DISABLED`.
   Never push to `ib0ndar/zMD` or `umzcio/zMD` from this repository.
@@ -67,11 +69,17 @@ Mermaid, KaTeX, and HTML fragments. There are no SwiftPM, CocoaPods, or Carthage
 
 Main components:
 
-- `Hashlight/HashlightApp.swift`: app/scenes, commands, window lifecycle, app-wide appearance.
+- `Hashlight/HashlightApp.swift`: app/scenes, commands, the About panel, window lifecycle,
+  app-wide appearance.
+- `Hashlight/ContentView.swift`, `NavigatorSidebar.swift`, `NormalContentView.swift`,
+  `ViewerToolbar.swift`: the main window, a `NavigationSplitView` with one sidebar navigator
+  (Files / Outline), a detail column (tab strip, preview, status bar), and the window toolbar
+  (Open, Focus Mode, Export, Find as a toolbar search field).
+- `Hashlight/SettingsView.swift`: the General, Preview, and Tables Settings panes.
 - `Hashlight/DocumentManager.swift`: documents, tabs, loading and silent reloads, file watching,
   find state, and closing.
-- `Hashlight/SettingsManager.swift`: persisted appearance, Dock icon, preview, layout, zoom, and
-  table settings.
+- `Hashlight/SettingsManager.swift`: persisted appearance, Dock icon, preview, layout, zoom,
+  navigator (sidebar mode and visibility), and table settings.
 - `Hashlight/DockIconController.swift`: applies the Dock icon setting to the running app's icon.
 - `Hashlight/MarkdownParser.swift`: block parser and HTML generation shared with Quick Look.
 - `Hashlight/InlineMarkdown.swift`: shared inline tokenizer.
@@ -84,7 +92,9 @@ Main components:
   app and Quick Look extension.
 - `HashlightQuickLook/`: sandboxed Finder Quick Look extension.
 - `HashlightTests/`: XCTest target covering parsing, rendering behavior, the preview, file
-  watching and closing, Quick Look, themes, fonts, table layout, and the Dock icon setting.
+  watching and closing, Quick Look, themes, fonts, table layout, the Dock icon setting, the
+  navigator settings migration, the Settings pane key, table-category editing, and the About
+  panel's credits.
 
 Read `CLAUDE.md` for the longer architecture guide and `CONTRIBUTING.md` for code conventions.
 
@@ -113,7 +123,7 @@ copy the results.
   catalog icon win on every macOS version (Apple: "by design"), and the known workarounds need
   Xcode 26.0.1 or a checked-in prebuilt `Assets.car`. It is not done; revisit only with the user
   and a macOS 15 machine to verify on.
-- **Dock icon setting** (plan 003): Settings → Appearance → Icon → Dock icon: System / Frost /
+- **Dock icon setting** (plan 003): Settings → General → Dock icon: System / Frost /
   Ember, default System, on **every** macOS version. The owner decided on 2026-09-30 to offer it on
   macOS 26 as well, overriding brief §4.2 ("hide the preference on macOS 26"); do not hide it
   again without asking.
@@ -126,7 +136,7 @@ copy the results.
   - The images are `Hashlight/DockIcon-Frost.icns` and `DockIcon-Ember.icns`, byte-for-byte copies
     of `design/icon/Hashlight-Frost.icns` and `Hashlight-Ember.icns` (`cmp` them after any
     change). Do not name either `Hashlight.icns`: the asset compiler writes that file.
-  - The welcome screen and Settings → About draw `DockIconController.shared.image`, so they show
+  - The welcome screen and the About panel draw `DockIconController.shared.image`, so they show
     the same icon as the Dock. `applicationIconImage` returns one shared image that AppKit redraws
     in place, which SwiftUI would not notice; do not draw it directly.
   - The macOS 13–15 path (System mode following Light/Dark through
@@ -159,6 +169,33 @@ copy the results.
 - `MarkdownParser.swift`, `InlineMarkdown.swift`, and `SharedConstants.swift` are compiled into
   both the app and Quick Look targets. Keep code they depend on Foundation-only or add matching
   target membership deliberately.
+- Settings has three panes, General · Preview · Tables (plan 004). There is no fixed window frame:
+  each pane sets its own size (`SettingsPane.width` / `height`), so the window resizes per pane;
+  measure after changing a pane's content. The last pane is restored from the `settingsPane`
+  defaults key. About is the standard About panel, not a pane. Escape closes Settings
+  (`EscapeKeyHandler`).
+- The main window is a `NavigationSplitView`. The sidebar navigator's mode (`navigatorMode`:
+  `files` / `outline`) and visibility (`navigatorVisible`) are persisted by `SettingsManager`,
+  migrated once from the former `showOutline` key; Open Folder switches it to Files and shows it.
+  Focus mode hides the sidebar (column visibility) without changing the saved visibility, keeps
+  only the window controls of the title bar (`FocusModeWindowChrome`: transparent title bar over
+  full-size content; the title and proxy icon are cleared through `navigationTitle` /
+  `navigationDocument`), and removes the toolbar items and the search field. Never hide the
+  toolbar itself (`toolbar(.hidden, for: .windowToolbar)` or `NSToolbar.isVisible`): on macOS 26
+  the first also removes the window controls and both resize the window.
+- On macOS 26 the status bar is a bottom-aligned `NSSplitViewItemAccessoryViewController`
+  (`StatusBarAccessory.swift`), attached to the detail split view item that `NavigationSplitView`
+  creates. AppKit insets the preview's `NSScrollView` for it and draws the scroll edge effect;
+  SwiftUI's `safeAreaBar` gives that effect to SwiftUI scroll views only. The anchor walks the
+  AppKit view hierarchy to find the item and falls back to an inline `.bar` inset if it cannot.
+- AppKit widens the window when a sidebar appears without animation, so every programmatic
+  sidebar or focus-mode change goes through `withAnimation(Motion.sidebar)` (never nil, near-instant
+  under Reduce Motion), and `SidebarAutosave` corrects the split view's autosaved "collapsed" flag
+  when the window closes or the app quits in focus mode. Closing and quitting stay immediate.
+- macOS 26-only APIs (`safeAreaBar`, `ToolbarSpacer`, `sharedBackgroundVisibility`, `.glass`,
+  `glassEffect`) are gated with `if #available(macOS 26, *)` at the view level (`ToolbarContentBuilder`
+  accepts `if #available` only from macOS 14.5), with plain fallbacks. Nothing may need the macOS 27
+  SDK (CI builds with Xcode 26.6). The `NSTextView` preview is content and gets no glass.
 
 ## Bundled themes and licensing
 

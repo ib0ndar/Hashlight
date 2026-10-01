@@ -3,9 +3,9 @@ import SwiftUI
 struct ContentView: View {
     @EnvironmentObject var documentManager: DocumentManager
     @EnvironmentObject var folderManager: FolderManager
+    @EnvironmentObject var settings: SettingsManager
     @Environment(\.openWindow) private var openWindow
     @Environment(\.dismiss) private var dismissWindow
-    @AppStorage(DefaultsKeys.showOutline) private var showOutline = false
     @State private var selectedHeadingId: String?
     @State private var showQuickOpen = false
     /// Text Quick Open opens with: "" normally, ">" for Search in Folder.
@@ -17,117 +17,40 @@ struct ContentView: View {
     /// Timestamp of the last zoomLevel write emitted from a live pinch tick (throttle state).
     @State private var lastZoomGestureEmit: Date = .distantPast
 
-    var body: some View {
-        ZStack {
-            VStack(spacing: 0) {
-                if !documentManager.openDocuments.isEmpty {
-                    // Chrome: tab bar + search bar. Scoped so find-bar toggles
-                    // animate only this sub-stack, never the preview below.
-                    VStack(spacing: 0) {
-                        // Tab bar (hidden in focus mode)
-                        if !documentManager.isFocusModeActive {
-                            TabBar(showOutline: $showOutline)
-                                .environmentObject(documentManager)
-                                .transition(Motion.slideOrFade(edge: .top))
-
-                            Divider()
-                        }
-
-                        // Search bar
-                        if documentManager.isSearching && !documentManager.isFocusModeActive {
-                            SearchBar(
-                                searchText: $documentManager.searchText,
-                                isSearching: $documentManager.isSearching,
-                                currentMatch: documentManager.renderedMatchCount > 0 ? documentManager.currentMatchIndex + 1 : 0,
-                                totalMatches: documentManager.renderedMatchCount,
-                                onNext: { documentManager.nextMatch() },
-                                onPrevious: { documentManager.previousMatch() },
-                                onClose: { documentManager.endSearch() }
-                            )
-                            .padding(8)
-                            .fadeInUnderReduceMotion()
-                            .transition(Motion.slideOrFade(edge: .top))
-
-                            Divider()
-                        }
-                    }
-                    .transition(.opacity)
-                    .animation(Motion.standard, value: documentManager.isSearching)
-
-                    // Content area
-                    if documentManager.isFocusModeActive {
-                        // Focus mode: centered content, no sidebars
-                        FocusModeContentView(selectedHeadingId: $selectedHeadingId)
-                    } else {
-                        // Normal mode: sidebars and outline
-                        NormalContentView(
-                            showOutline: $showOutline,
-                            selectedHeadingId: $selectedHeadingId
-                        )
-                    }
-
-                    // Status bar (hidden in focus mode)
-                    if !documentManager.isFocusModeActive {
-                        Divider()
-                        StatusBarView()
-                            .environmentObject(documentManager)
-                            .transition(Motion.slideOrFade(edge: .bottom))
-                    }
-                } else {
-                    WelcomeView()
-                        .transition(.opacity)
-                }
+    /// Focus mode hides the sidebar without changing the saved visibility.
+    private var columnVisibility: Binding<NavigationSplitViewVisibility> {
+        Binding(
+            get: {
+                settings.isNavigatorVisible && !documentManager.isFocusModeActive ? .all : .detailOnly
+            },
+            set: { visibility in
+                guard !documentManager.isFocusModeActive else { return }
+                settings.isNavigatorVisible = visibility != .detailOnly
             }
-            .animation(Motion.standard, value: documentManager.openDocuments.isEmpty)
-            .frame(minWidth: 600, minHeight: 400)
+        )
+    }
 
-            // Focus mode exit pill + Escape handler. Attach a hidden cancelAction button so
-            // Escape triggers `isFocusModeActive = false` without needing a local NSEvent monitor.
-            if documentManager.isFocusModeActive {
-                // Invisible Escape-to-exit button; accessibility: labeled for screen readers.
-                Button("Exit Focus Mode") {
-                    withAnimation(Motion.morph) {
-                        documentManager.isFocusModeActive = false
+    var body: some View {
+        NavigationSplitView(columnVisibility: columnVisibility) {
+            NavigatorSidebar(selectedHeadingId: $selectedHeadingId)
+                .navigationSplitViewColumnWidth(min: 200, ideal: 240)
+                .modifier(SidebarToggleRemoval(isRemoved: documentManager.isFocusModeActive))
+        } detail: {
+            ZStack {
+                Group {
+                    if documentManager.openDocuments.isEmpty {
+                        WelcomeView()
+                            .modifier(ViewerToolbar(documentManager: documentManager, hasDocument: false))
+                            .transition(.opacity)
+                    } else {
+                        NormalContentView(selectedHeadingId: $selectedHeadingId)
                     }
                 }
-                .keyboardShortcut(.cancelAction)
-                .opacity(0)
-                .frame(width: 0, height: 0)
-                .accessibilityLabel("Exit Focus Mode")
+                .animation(Motion.standard, value: documentManager.openDocuments.isEmpty)
 
-                VStack {
-                    if showFocusExitPill {
-                        Button(action: {
-                            withAnimation(Motion.morph) {
-                                documentManager.isFocusModeActive = false
-                            }
-                        }) {
-                            HStack(spacing: 6) {
-                                Image(systemName: "arrow.down.left.and.arrow.up.right")
-                                    .font(.system(size: 10, weight: .medium))
-                                Text("Exit Focus Mode")
-                                    .font(.system(size: 11, weight: .medium))
-                            }
-                            .padding(.horizontal, 12)
-                            .padding(.vertical, 6)
-                            .background(.ultraThinMaterial)
-                            .clipShape(Capsule())
-                            .shadow(color: .black.opacity(0.15), radius: 4, y: 2)
-                        }
-                        .buttonStyle(PlainButtonStyle())
-                        .transition(Motion.slideOrFade(edge: .top))
-                    }
-                    Spacer()
+                if documentManager.isFocusModeActive {
+                    focusModeControls
                 }
-                .padding(.top, 12)
-                .frame(maxWidth: .infinity)
-                .contentShape(Rectangle())
-                .onHover { hovering in
-                    withAnimation(Motion.entrance) {
-                        showFocusExitPill = hovering
-                    }
-                }
-                .allowsHitTesting(true)
             }
         }
         .overlay {
@@ -163,7 +86,7 @@ struct ContentView: View {
             showCommandPalette = true
         }
         .onReceive(NotificationCenter.default.publisher(for: .toggleFocusMode)) { _ in
-            withAnimation(Motion.morph) {
+            withAnimation(Motion.sidebar) {
                 documentManager.isFocusModeActive.toggle()
             }
         }
@@ -215,6 +138,53 @@ struct ContentView: View {
         }
     }
 
+    /// Escape and a hover-revealed button leave focus mode. The hidden cancelAction button
+    /// catches Escape without a local NSEvent monitor.
+    @ViewBuilder
+    private var focusModeControls: some View {
+        Button("Exit Focus Mode", action: exitFocusMode)
+            .keyboardShortcut(.cancelAction)
+            .opacity(0)
+            .frame(width: 0, height: 0)
+            .accessibilityLabel("Exit Focus Mode")
+
+        VStack {
+            ZStack {
+                if showFocusExitPill {
+                    focusExitButton
+                        .transition(Motion.slideOrFade(edge: .top))
+                }
+            }
+            .frame(maxWidth: .infinity, minHeight: 56, alignment: .top)
+            .padding(.top, 12)
+            .contentShape(Rectangle())
+            .onHover { hovering in
+                withAnimation(Motion.entrance) {
+                    showFocusExitPill = hovering
+                }
+            }
+            Spacer()
+        }
+    }
+
+    /// A floating control over content: Liquid Glass on macOS 26, a bordered button before.
+    @ViewBuilder
+    private var focusExitButton: some View {
+        let button = Button(action: exitFocusMode) {
+            Label("Exit Focus Mode", systemImage: "arrow.down.left.and.arrow.up.right")
+        }
+        if #available(macOS 26, *) {
+            button.buttonStyle(.glass)
+        } else {
+            button.buttonStyle(.bordered)
+        }
+    }
+
+    private func exitFocusMode() {
+        withAnimation(Motion.sidebar) {
+            documentManager.isFocusModeActive = false
+        }
+    }
 }
 
 extension Notification.Name {
@@ -222,6 +192,22 @@ extension Notification.Name {
     static let showFolderSearch = Notification.Name("showFolderSearch")
     static let showCommandPalette = Notification.Name("showCommandPalette")
     static let toggleFocusMode = Notification.Name("toggleFocusMode")
+    /// ⌘F: start a find and focus the toolbar's search field.
+    static let focusFindField = Notification.Name("focusFindField")
+}
+
+/// Focus mode hides the sidebar, so it also drops the toolbar's sidebar toggle (macOS 14+; on
+/// macOS 13 the toggle stays and does nothing while focus mode is on).
+private struct SidebarToggleRemoval: ViewModifier {
+    let isRemoved: Bool
+
+    func body(content: Content) -> some View {
+        if #available(macOS 14, *) {
+            content.toolbar(removing: isRemoved ? .sidebarToggle : nil)
+        } else {
+            content
+        }
+    }
 }
 
 #Preview {

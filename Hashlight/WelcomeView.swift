@@ -9,7 +9,6 @@ struct WelcomeView: View {
     @State private var showHint = false
     @State private var showRecents = false
     @State private var iconBounce = false
-    @State private var buttonHovered = false
 
     var body: some View {
         VStack(spacing: 0) {
@@ -29,27 +28,10 @@ struct WelcomeView: View {
                 .offset(y: showSubtitle ? 0 : 8)
 
             Button(action: documentManager.openFile) {
-                HStack(spacing: 8) {
-                    Image(systemName: "folder")
-                        .font(.system(size: 14))
-                    Text("Open File")
-                        .font(.system(size: 14, weight: .medium))
-                }
-                .padding(.horizontal, 20)
-                .padding(.vertical, 10)
-                .background(
-                    RoundedRectangle(cornerRadius: 8)
-                        .fill(buttonHovered ? Color.accentColor : Color.accentColor.opacity(0.85))
-                )
-                .foregroundStyle(.white)
-                .scaleEffect(buttonHovered && !Motion.reduceMotion ? 1.03 : 1.0)
+                Label("Open File", systemImage: "folder")
             }
-            .buttonStyle(PressableButtonStyle())
-            .onHover { hovering in
-                withAnimation(Motion.fast) {
-                    buttonHovered = hovering
-                }
-            }
+            .buttonStyle(.borderedProminent)
+            .controlSize(.large)
             .opacity(showButton ? 1 : 0)
             .offset(y: showButton ? 0 : 8)
             .padding(.top, 24)
@@ -78,9 +60,9 @@ struct WelcomeView: View {
             if !documentManager.recentFileURLs.isEmpty {
                 VStack(alignment: .leading, spacing: 0) {
                     HStack {
-                        Text("RECENT FILES")
-                            .font(.system(size: 10, weight: .semibold))
-                            .foregroundStyle(Color(NSColor.tertiaryLabelColor))
+                        Text("Recent Files")
+                            .font(.subheadline.weight(.semibold))
+                            .foregroundStyle(.secondary)
 
                         Spacer()
 
@@ -89,46 +71,16 @@ struct WelcomeView: View {
                                 documentManager.clearRecentFiles()
                             }
                         }
-                        .font(.system(size: 10))
-                        .foregroundStyle(Color(NSColor.tertiaryLabelColor))
-                        .buttonStyle(.plain)
-                        .onHover { hovering in
-                            if hovering {
-                                NSCursor.pointingHand.push()
-                            } else {
-                                NSCursor.pop()
-                            }
-                        }
+                        .buttonStyle(.link)
+                        .font(.subheadline)
                     }
                     .padding(.horizontal, 16)
                     .padding(.bottom, 6)
 
                     ForEach(documentManager.recentFileURLs.prefix(5), id: \.path) { url in
-                        Button {
+                        RecentFileRow(url: url) {
                             documentManager.loadDocument(from: url)
-                        } label: {
-                            HStack(spacing: 8) {
-                                Image(systemName: "doc.text")
-                                    .font(.system(size: 12))
-                                    .foregroundStyle(Color.accentColor)
-                                    .frame(width: 16)
-                                VStack(alignment: .leading, spacing: 1) {
-                                    Text(url.lastPathComponent)
-                                        .font(.system(size: 12, weight: .medium))
-                                        .foregroundStyle(.primary)
-                                        .lineLimit(1)
-                                    Text(url.deletingLastPathComponent().path)
-                                        .font(.system(size: 10))
-                                        .foregroundStyle(Color(NSColor.tertiaryLabelColor))
-                                        .lineLimit(1)
-                                }
-                                Spacer()
-                            }
-                            .padding(.horizontal, 16)
-                            .padding(.vertical, 6)
-                            .contentShape(Rectangle())
                         }
-                        .buttonStyle(RecentFileButtonStyle())
                     }
                 }
                 .frame(width: 320)
@@ -176,5 +128,42 @@ struct WelcomeView: View {
         withAnimation(.easeOut(duration: 0.35).delay(0.28)) {
             showRecents = true
         }
+    }
+}
+
+/// One recent file: a plain button whose only hover feedback is a quiet background.
+private struct RecentFileRow: View {
+    let url: URL
+    let action: () -> Void
+    @State private var isHovered = false
+
+    var body: some View {
+        Button(action: action) {
+            HStack(spacing: 8) {
+                Image(systemName: "doc.text")
+                    .foregroundStyle(.secondary)
+                    .frame(width: 16)
+                VStack(alignment: .leading, spacing: 1) {
+                    Text(url.lastPathComponent)
+                        .font(.system(size: 12, weight: .medium))
+                        .foregroundStyle(.primary)
+                        .lineLimit(1)
+                    Text(url.deletingLastPathComponent().path)
+                        .font(.system(size: 10))
+                        .foregroundStyle(.tertiary)
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+                }
+                Spacer()
+            }
+            .padding(.horizontal, 12)
+            .padding(.vertical, 6)
+            .background(isHovered ? AnyShapeStyle(.quaternary) : AnyShapeStyle(.clear), in: RoundedRectangle(cornerRadius: 6))
+            .padding(.horizontal, 4)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .onHover { isHovered = $0 }
+        .help(url.path)
     }
 }

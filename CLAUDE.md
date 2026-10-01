@@ -4,12 +4,13 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-**Hashlight** is a lightweight, read-only macOS Markdown viewer built with SwiftUI, with a clean, Typora-inspired interface, tabs, an outline sidebar, folder search, and export. It never writes to a Markdown file: there is no source editor, split view, saving, or find & replace, and closing never prompts. It started from zMD Viewer, the read-only edition of zMD; see `AGENTS.md` for its identity, origin, and rules.
+**Hashlight** is a lightweight, read-only macOS Markdown viewer built with SwiftUI, with a clean, Typora-inspired interface, tabs, a files-and-outline sidebar, folder search, and export. It never writes to a Markdown file: there is no source editor, split view, saving, or find & replace, and closing never prompts. It started from zMD Viewer, the read-only edition of zMD; see `AGENTS.md` for its identity, origin, and rules.
 
 **Key Features:**
 - Multi-tab document management
 - Real-time markdown rendering with Typora-style formatting
-- Hierarchical outline sidebar, Quick Open, folder search, and find in the rendered text
+- A `NavigationSplitView` window: one sidebar navigator (Files / Outline) and a window toolbar (Open, Focus Mode, Export, Find); Liquid Glass on macOS 26 (plan 004)
+- Hierarchical outline, Quick Open, folder search, and find in the rendered text
 - Live reload when another app changes an open file (keeps the scroll position)
 - Export to PDF, HTML, RTF, and DOCX, and native print
 - Native macOS integration with keyboard shortcuts
@@ -56,26 +57,39 @@ The app uses SwiftUI's `@StateObject` / `@EnvironmentObject` pattern for central
   - Tracks `selectedDocumentId` for active tab
   - Handles file loading, reloading, tab switching, and document lifecycle. Documents are read-only: nothing writes them back, so closing a tab or the window and quitting never prompt.
   - Watches each open file (`FileWatcher`): an external change reloads the tab silently; a deleted file asks before its tab closes
-  - Holds the find-bar state; the preview computes the matches in its rendered text and reports their count
+  - Holds the find state behind the toolbar's search field; the preview computes the matches in its rendered text and reports their count
   - Injected into view hierarchy via `.environmentObject()` at app root
-- **SettingsManager** (`SettingsManager.swift`): Persists application appearance, the Dock icon choice, separate light/dark preview themes, preview fonts, layout, zoom, and the versioned Markdown table-column configuration. Preview themes are bundled Base16 palettes (`PreviewTheme.swift`); font menus are derived from installed proportional and monospaced families (`PreviewFont.swift`).
-- **DockIconController** (`DockIconController.swift`): Applies the Dock icon setting (System / Frost / Ember) to `NSApp.applicationIconImage` and publishes the image the welcome screen and About draw. It never touches the bundle's icon on disk.
+- **SettingsManager** (`SettingsManager.swift`): Persists application appearance, the Dock icon choice, separate light/dark preview themes, preview fonts, layout, zoom, the sidebar navigator's mode (Files / Outline) and visibility (migrated once from the former `showOutline` key), and the versioned Markdown table-column configuration. Preview themes are bundled Base16 palettes (`PreviewTheme.swift`); font menus are derived from installed proportional and monospaced families (`PreviewFont.swift`).
+- **DockIconController** (`DockIconController.swift`): Applies the Dock icon setting (System / Frost / Ember) to `NSApp.applicationIconImage` and publishes the image the welcome screen and the About panel draw. It never touches the bundle's icon on disk.
 
 ### View Hierarchy
 
 ```
-HashlightApp (App entry point)
-└── ContentView (Main container)
-    ├── TabBar (Tab interface + controls)
-    │   └── TabItem[] (Individual tabs with context menus)
-    ├── SearchBar (Find in the rendered text - conditional)
-    ├── NormalContentView / FocusModeContentView
-    │   ├── FolderSidebarView (conditional)
-    │   ├── OutlineView (Sidebar - conditional)
-    │   └── DocumentViewModeContent
-    │       └── MarkdownTextView (Rendered content via NSTextView)
-    └── StatusBarView
+HashlightApp (App entry point; Window scene + Settings scene, About panel)
+└── ContentView (NavigationSplitView; overlays: Quick Open, command palette, toasts)
+    ├── sidebar: NavigatorSidebar (Files / Outline segmented picker)
+    │   ├── FolderSidebarView (Files: List + DisclosureGroup tree)
+    │   └── OutlineView (Outline: List of headings)
+    └── detail: WelcomeView (no documents) or NormalContentView
+        ├── ViewerToolbar (toolbar modifier) + .searchable (Find in the toolbar)
+        ├── TabBar (plain content-layer strip; hidden in focus mode)
+        │   └── TabItem[] (Individual tabs with context menus)
+        ├── DocumentViewModeContent / FocusModeContentView
+        │   └── MarkdownTextView (Rendered content via NSTextView)
+        └── StatusBarView (split-item accessory on macOS 26 via StatusBarAccessory.swift,
+                           safeAreaInset + .bar before or if the accessory cannot attach)
 ```
+
+The detail column sets `navigationTitle` / `navigationDocument` (window title and proxy icon).
+macOS 26-only APIs (`NSSplitViewItemAccessoryViewController`, `ToolbarSpacer`, `.glass`,
+`glassEffect`) are behind `if #available(macOS 26, *)` at the view level: toolbar builders only
+accept `if #available` from macOS 14.5. Focus mode collapses the sidebar through the split view's
+column visibility without changing the saved navigator visibility, and `FocusModeWindowChrome`
+(in `HashlightApp.swift`) makes the title bar transparent over full-size content so only the
+window controls remain; every programmatic sidebar change uses `Motion.sidebar`
+(never nil), because AppKit widens the window when a sidebar appears without animation, and
+`SidebarAutosave` corrects AppKit's autosaved "collapsed" flag when a window closes or the app quits
+in focus mode.
 
 ### Markdown Rendering Architecture
 
@@ -120,10 +134,12 @@ All exports use `NSSavePanel` and run on main thread. HTML conversion routes thr
 
 Defined in `HashlightApp.swift` using SwiftUI's `.commands` modifier:
 
+- App menu: About Hashlight (the standard About panel with the Dock icon setting's icon and `Credits.rtf`)
 - File menu: Open (⌘O), Quick Open (⌘⇧O), Search in Folder (⌃⇧F), Open Folder (⌘⌥O), Close Folder, Open Recent, Open File Location, Print (⌘P)
-- Export submenu: PDF, HTML (with/without styles), Word (.docx), Word (.rtf)
-- Edit menu: Find (⌘F), Find Next (⌘G), Find Previous (⌘⇧G)
-- View menu: Focus Mode (⌘⇧F), Command Palette (⌘K), Zoom In/Out/Reset (⌘= / ⌘- / ⌘0), Refresh (⌘R)
+- Export submenu: PDF, HTML (with/without styles), Word (.docx), Word (.rtf) (`ExportMenuItems`, shared with the toolbar's Export menu)
+- Edit menu: Find (⌘F, focuses the toolbar's search field), Find Next (⌘G), Find Previous (⌘⇧G)
+- View menu: Focus Mode (⌘⇧F), Command Palette (⌘K), Zoom In/Out/Reset (⌘= / ⌘- / ⌘0), Refresh (⌘R), Show/Hide Sidebar (⌃⌘S), Navigator → Files / Outline (⌘⌥1 / ⌘⌥2)
+- Toolbar: sidebar toggle (from `NavigationSplitView`), Open…, Focus Mode, Export menu (+ Print), Find field; every item is also a menu command
 - Tab menu: Close (⌘W), Refresh Tab, Next (⌃Tab), Previous (⌃⇧Tab)
 - Right-click tab menu: Refresh, Close Tab, Close Other Tabs, Reveal in Finder
 - The `saveItem` group is replaced by an empty group so ⌘W stays Close Tab. There is no Format menu, Save, New File, view-mode switching, or Check for Updates.
@@ -132,8 +148,11 @@ Defined in `HashlightApp.swift` using SwiftUI's `.commands` modifier:
 
 ```
 Hashlight/
-├── HashlightApp.swift     # App entry point, menu commands, keyboard shortcuts, window delegate
-├── ContentView.swift      # Main view container and layout
+├── HashlightApp.swift     # App entry point, menu commands, About panel, window delegate
+├── ContentView.swift      # NavigationSplitView root, overlays, focus-mode controls
+├── NavigatorSidebar.swift # Sidebar navigator: Files / Outline picker and empty states
+├── NormalContentView.swift # Detail column: tab strip, preview, status bar, toolbar find
+├── ViewerToolbar.swift    # Window toolbar, shared Export/Print menu items, find-field focus
 ├── DocumentManager.swift    # Document state, file watching, find state (@ObservableObject)
 ├── DocumentViewModeContent.swift # The preview for one document
 ├── MarkdownTextView.swift   # NSTextView-based markdown renderer
@@ -142,19 +161,22 @@ Hashlight/
 ├── Resources/               # Pinned Base16 theme data and upstream license
 ├── SharedConstants.swift    # App/Quick Look constants and table-column layout model
 ├── MarkdownParser.swift     # Shared markdown parser for exports
-├── TabBar.swift             # Tab bar UI and tab items
-├── OutlineView.swift        # Hierarchical outline sidebar (cached headings)
+├── TabBar.swift             # Tab strip UI and tab items
+├── OutlineView.swift        # Outline navigator list (cached headings)
+├── FolderSidebarView.swift  # Files navigator list (open folder's Markdown tree)
+├── SettingsView.swift       # Settings: General / Preview / Tables panes, category editor
 ├── ExportManager.swift      # PDF/HTML/RTF/DOCX export functionality
 ├── SyntaxHighlighter.swift  # Code block syntax highlighting
 ├── AlertManager.swift       # Centralized alert/error management
 ├── FileWatcher.swift        # File change monitoring (drives silent reloads)
-├── FolderManager.swift      # Folder sidebar tree and folder-wide content search
+├── FolderManager.swift      # Open folder's file tree and folder-wide content search
 ├── QuickOpenView.swift      # Quick open dialog
 ├── Assets.xcassets/         # Accent color (no app icon here)
 ├── Hashlight.icon/          # App icon (Icon Composer bundle; copy of design/icon/Hashlight.icon)
 ├── DockIcon-Frost.icns      # Dock icon setting's images (copies of design/icon/Hashlight-*.icns)
 ├── DockIcon-Ember.icns
 ├── DockIconController.swift # Applies the Dock icon setting to the running app's icon
+├── Credits.rtf              # About panel credits ("Based on zMD by Zachary Rossmiller")
 └── Hashlight.entitlements   # Sandbox disabled; see Sandboxing Considerations below
 ```
 

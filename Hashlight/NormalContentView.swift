@@ -1,46 +1,141 @@
 import SwiftUI
 
+/// The split view's detail column while documents are open: the tab strip, the preview, the
+/// status bar, and the window toolbar with Find. Focus mode keeps only the centered preview.
 struct NormalContentView: View {
     @EnvironmentObject private var documentManager: DocumentManager
-    @EnvironmentObject private var folderManager: FolderManager
-    @Binding var showOutline: Bool
+    @EnvironmentObject private var settings: SettingsManager
     @Binding var selectedHeadingId: String?
 
     var body: some View {
-        HStack(spacing: 0) {
-            if folderManager.isShowingFolderSidebar {
-                FolderSidebarView()
-                    .fadeInUnderReduceMotion()
-                    .transition(Motion.slideOrFade(edge: .leading))
-                Divider()
+        if let document = documentManager.selectedDocument {
+            documentColumn(document)
+        } else {
+            EmptyDocumentView()
+                .modifier(ViewerToolbar(documentManager: documentManager, hasDocument: false))
+        }
+    }
+
+    private func documentColumn(_ document: MarkdownDocument) -> some View {
+        let isFocusMode = documentManager.isFocusModeActive
+        return VStack(spacing: 0) {
+            if !isFocusMode {
+                TabBar()
+                    .transition(Motion.slideOrFade(edge: .top))
             }
 
-            if let selectedId = documentManager.selectedDocumentId,
-               let document = documentManager.openDocuments.first(where: { $0.id == selectedId }) {
-                HStack(spacing: 0) {
-                    if showOutline {
-                        // .id(document.id) forces SwiftUI to create a fresh OutlineView when the
-                        // active document changes, so the @State `headings` cache resets and gets
-                        // rebuilt from onAppear. Without this, switching tabs sometimes left the
-                        // outline showing the previous document's headings (onChange-of-content
-                        // doesn't fire reliably across tab swaps on macOS 13).
-                        OutlineView(content: document.content, selectedHeadingId: $selectedHeadingId)
-                            .id(document.id)
-                            .fadeInUnderReduceMotion()
-                            .transition(Motion.slideOrFade(edge: .trailing))
-                        Divider()
-                    }
-
-                    DocumentViewModeContent(
-                        document: document,
-                        selectedHeadingId: $selectedHeadingId
-                    )
-                }
-                // showOutline is @AppStorage-backed; its write does not carry the toggle's
-                // withAnimation transaction, so the outline appeared without its transition.
-                .animation(Motion.standard, value: showOutline)
+            if isFocusMode {
+                // The scroll view runs under the transparent title bar; AppKit insets its
+                // content for the bar and applies the scroll edge effect there.
+                FocusModeContentView(selectedHeadingId: $selectedHeadingId)
+                    .ignoresSafeArea(.container, edges: .top)
             } else {
-                EmptyDocumentView()
+                DocumentViewModeContent(document: document, selectedHeadingId: $selectedHeadingId)
+            }
+        }
+        .modifier(StatusBarPlacement(isShown: !isFocusMode, documentManager: documentManager, settings: settings))
+        // Focus mode shows no title or proxy icon: SwiftUI owns them and re-asserts the
+        // window's title visibility, so they are cleared here rather than through NSWindow.
+        .navigationTitle(isFocusMode ? "" : document.name)
+        .modifier(DocumentProxy(url: isFocusMode ? nil : document.url))
+        .modifier(ViewerToolbar(documentManager: documentManager, hasDocument: true, isFocusMode: isFocusMode))
+        .modifier(ToolbarFind(documentManager: documentManager, isShown: !isFocusMode))
+        .onChange(of: documentManager.searchText) { text in
+            // The field is always in the toolbar: typing starts a find, and clearing the field
+            // (Escape, its clear button) ends it and removes the highlights.
+            if text.isEmpty {
+                if documentManager.isSearching {
+                    documentManager.endSearch()
+                }
+            } else if !documentManager.isSearching {
+                documentManager.isSearching = true
+            }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .focusFindField)) { _ in
+            guard !documentManager.isFocusModeActive else { return }
+            if !documentManager.isSearching {
+                documentManager.startSearch()
+            }
+            DispatchQueue.main.async {
+                FindField.focus()
+            }
+        }
+    }
+}
+
+/// The title bar's proxy icon and drag source, present outside focus mode.
+private struct DocumentProxy: ViewModifier {
+    let url: URL?
+
+    func body(content: Content) -> some View {
+        if let url {
+            content.navigationDocument(url)
+        } else {
+            content
+        }
+    }
+}
+
+/// Find as the toolbar's search field; Return goes to the next match. Focus mode, which shows
+/// only the document, has no search field (the preview keeps any current highlights).
+private struct ToolbarFind: ViewModifier {
+    @ObservedObject var documentManager: DocumentManager
+    let isShown: Bool
+
+    func body(content: Content) -> some View {
+        if isShown {
+            content
+                .searchable(text: $documentManager.searchText, placement: .toolbar, prompt: "Find in document")
+                .onSubmit(of: .search) {
+                    documentManager.nextMatch()
+                }
+        } else {
+            content
+        }
+    }
+}
+
+/// Places the status bar under the detail column. On macOS 26 it is a split-item accessory
+/// (`StatusBarAccessoryAnchor`): AppKit insets the preview's scroll view for it and draws the
+/// scroll edge effect where the document passes underneath. Before that, or if the accessory
+/// cannot attach, it is an inset on the standard bar material.
+private struct StatusBarPlacement: ViewModifier {
+    let isShown: Bool
+    let documentManager: DocumentManager
+    let settings: SettingsManager
+    @State private var accessoryIsAttached = true
+
+    func body(content: Content) -> some View {
+        if #available(macOS 26, *) {
+            content
+                .background {
+                    StatusBarAccessoryAnchor(isShown: isShown, isAttached: $accessoryIsAttached) {
+                        StatusBarView()
+                            .environmentObject(documentManager)
+                            .environmentObject(settings)
+                    }
+                    .frame(width: 0, height: 0)
+                }
+                .modifier(InsetStatusBar(isShown: isShown && !accessoryIsAttached))
+        } else {
+            content.modifier(InsetStatusBar(isShown: isShown))
+        }
+    }
+}
+
+/// The status bar as a bottom inset on the standard bar material.
+private struct InsetStatusBar: ViewModifier {
+    let isShown: Bool
+
+    func body(content: Content) -> some View {
+        content.safeAreaInset(edge: .bottom, spacing: 0) {
+            if isShown {
+                VStack(spacing: 0) {
+                    Divider()
+                    StatusBarView()
+                }
+                .background(.bar)
+                .transition(Motion.slideOrFade(edge: .bottom))
             }
         }
     }

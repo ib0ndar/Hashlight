@@ -6,7 +6,7 @@
 
 <p align="center">
   <strong>Native macOS Markdown viewer</strong><br/>
-  A lightweight, Typora-inspired reader with tabs, an outline sidebar, folder search, and full export support. It never changes your files.<br/><br/>
+  A lightweight, Typora-inspired reader with tabs, a files-and-outline sidebar, folder search, and full export support. It never changes your files.<br/><br/>
   <a href="https://github.com/ib0ndar/Hashlight/issues">Issues</a> · <a href="https://github.com/ib0ndar/Hashlight/blob/main/CLAUDE.md">Developer Guide</a>
 </p>
 
@@ -40,9 +40,9 @@ zMD's renderer, navigation, and exports; the editor, the updater, and zMD's hist
 Open .md --> Rendered preview (reloads when the file changes) --> Export PDF/HTML/Word
 ```
 
-1. **Open a file**: `⌘O`, drag and drop, double-click in Finder, Open Recent, or a folder in the sidebar
+1. **Open a file**: `⌘O` or the toolbar's Open button, drag and drop, double-click in Finder, Open Recent, or a folder in the sidebar
 2. **Read**: headings, code blocks with syntax highlighting, tables, Mermaid diagrams, LaTeX math, clickable links
-3. **Find your way**: outline, find in document, Quick Open, search across a folder, command palette
+3. **Find your way**: outline sidebar, find in the toolbar, Quick Open, search across a folder, command palette
 4. **Export anywhere**: PDF (paginated), HTML (with or without styles), Word (.docx / .rtf), native print
 
 ---
@@ -62,15 +62,17 @@ Open .md --> Rendered preview (reloads when the file changes) --> Export PDF/HTM
 - **Task lists** — `- [ ]` / `- [x]` rendered as read-only checkboxes
 - **GitHub alerts** — `> [!NOTE]`, `[!TIP]`, `[!IMPORTANT]`, `[!WARNING]`, `[!CAUTION]` callouts (preview and every export)
 - **Code block copy** — hover a code block for a copy button, or right-click → Copy Code Block
-- **Layout** — position the text column left / center / right and choose its width (Narrow → Full), from Settings or the status bar
+- **Layout** — position the text column left / center / right and choose its width (Narrow → Full), from Settings → Preview or the status bar
 
 ### Navigation & Search
+- **Window** — a resizable, collapsible sidebar and a toolbar with Open, Focus Mode, Export, and Find (Liquid Glass on macOS 26; a standard toolbar on macOS 13–15)
 - **Multi-tab interface** — drag to reorder, right-click for tab options
-- **Folder sidebar** — open a directory and browse all markdown files with FSEvents watching
-- **Outline sidebar** — hierarchical heading navigation with click-to-scroll
+- **Sidebar navigator** — one sidebar that switches between **Files** (`⌘⌥1`) and **Outline** (`⌘⌥2`); show or hide it with `⌃⌘S`
+- **Files** — open a directory and browse all markdown files with FSEvents watching
+- **Outline** — hierarchical heading navigation with click-to-scroll
 - **Quick switcher** (`⌘⇧O`) — fuzzy search across open files, or `@file` / `#heading` targeted search
 - **Command palette** (`⌘K`) — every app action, searchable
-- **Find in document** (`⌘F`) — searches the rendered text, with match highlighting and next/previous navigation
+- **Find in document** (`⌘F`) — the toolbar's search field searches the rendered text, with match highlighting, a match counter, and next/previous navigation (`Return`, `⌘G`, `⌘⇧G`)
 - **Search in folder** (`⌃⇧F`, or type `>` in the quick switcher) — search file contents across the open folder; Enter opens the file on that exact match
 - **Quick Look** — press Space on a `.md` file in Finder for a rendered preview
 - **Reading position memory** — automatically remembers scroll position per document
@@ -86,18 +88,20 @@ Open .md --> Rendered preview (reloads when the file changes) --> Export PDF/HTM
 - **Live reload** — when another app saves an open file, its tab reloads silently and keeps your reading position; a deleted file asks before its tab closes
 - **Read-only by design** — nothing in the app writes to your Markdown files, so closing a tab, closing the window and quitting never ask anything
 - **Multi-encoding detection** — auto-decodes UTF-8, Windows CP1252, ISO Latin-1, Mac Roman, UTF-16
-- **Reveal in Finder** — File → Open File Location, the tab's context menu, or the title bar's proxy icon
+- **Reveal in Finder** — File → Open File Location, the tab's or sidebar's context menu, or the title bar's proxy icon
 - **Open Recent** — last 10 files with bookmarks
 - **Drag-and-drop** — drop `.md` files onto the window to open
 
 ### UX Polish
-- **Focus mode** (`⌘⇧F`) — hides everything, centers content at 720px max, floating exit pill
+- **Focus mode** (`⌘⇧F`) — hides the sidebar, toolbar items, tabs, and status bar, centers content at 720px max; a floating (Liquid Glass) exit button appears on hover
 - **Status bar** — word count, character count, reading time, layout, zoom, detected encoding
 - **Zoom** — `⌘+` / `⌘−` / `⌘0`, pinch-to-zoom trackpad gesture
 - **Themes** — System / Light / Dark application appearance, with separate drop-down menus for 102 light and 249 dark Base16 preview themes
 - **Preview fonts** — independently select an installed proportional font for Markdown text and a monospaced font for code and commands
 - **Adaptive icon** — a Liquid Glass `#` lit by an amber spark; on macOS 26 it follows the system's icon style (Frost by default, Ember in dark, plus Clear and Tinted)
-- **Dock icon** — keep the system's choice or always show Frost or Ember in the Dock and app switcher (Settings → Appearance → Icon)
+- **Dock icon** — keep the system's choice or always show Frost or Ember in the Dock and app switcher (Settings → General)
+- **Settings** — three panes: **General** (appearance, Dock icon), **Preview** (themes, fonts, layout), and **Tables** (column categories); Settings reopens on the pane you used last
+- **About** — Hashlight → About Hashlight shows the version, the icon the Dock shows, and the zMD credit
 
 ---
 
@@ -168,10 +172,12 @@ Settings → General → Login Items & Extensions → Quick Look.
 | `⌘K` | Command palette |
 | `⌘W` | Close tab |
 | `⌘R` | Refresh the current tab |
-| `⌘F` | Find in document |
+| `⌘F` | Find in document (toolbar search field) |
 | `⌘G` / `⌘⇧G` | Next / previous match |
 | `⌘P` | Print |
 | `⌘⇧F` | Focus mode |
+| `⌃⌘S` | Show / hide the sidebar |
+| `⌘⌥1` / `⌘⌥2` | Sidebar: Files / Outline |
 | `⌘=` / `⌘−` / `⌘0` | Zoom in / out / reset |
 | `⌘,` | Settings |
 | `⌃Tab` / `⌃⇧Tab` | Next / previous tab |
@@ -183,7 +189,7 @@ Settings → General → Login Items & Extensions → Quick Look.
 The official icon and brand package live in [`design/`](design/); start with
 [`design/BRIEF.md`](design/BRIEF.md). The app compiles `Hashlight/Hashlight.icon`, an Icon Composer
 bundle: macOS 26 renders it with the system's icon style, and Xcode generates a flattened Frost
-fallback for macOS 13–15. Settings → Appearance → Icon can instead pin the running app's Dock icon
+fallback for macOS 13–15. Settings → General → Dock icon can instead pin the running app's Dock icon
 to Frost or Ember, using the designer's `.icns` renditions; Finder always shows the bundle icon.
 `design/icon/Hashlight-Frost-1024.png` is the canonical marketing image.
 

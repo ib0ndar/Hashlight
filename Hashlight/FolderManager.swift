@@ -12,8 +12,20 @@ class FolderManager: ObservableObject {
     static let shared = FolderManager()
 
     @Published var folderURL: URL?
-    @Published var fileTree: [FileTreeItem] = []
-    @Published var isShowingFolderSidebar: Bool = false
+    @Published var fileTree: [FileTreeItem] = [] {
+        didSet { indexFileTree() }
+    }
+
+    /// True while a folder is open. The navigator's Files mode shows it; nothing else depends on it.
+    var isFolderOpen: Bool { folderURL != nil }
+
+    /// Folders expanded in the Files navigator, kept while the folder stays open so switching
+    /// the navigator to Outline and back does not collapse the tree.
+    @Published var expandedDirectoryIDs: Set<String> = []
+
+    /// Tree items by id, and item ids by standardized file path, for the navigator's selection.
+    private(set) var itemsByID: [String: FileTreeItem] = [:]
+    private var itemIDsByPath: [String: String] = [:]
 
     private var directoryWatcher: DirectoryWatcher?
     private var securityScopedAccess = false
@@ -41,6 +53,7 @@ class FolderManager: ObservableObject {
         panel.begin { [weak self] response in
             guard response == .OK, let url = panel.url else { return }
             self?.setFolder(url)
+            SettingsManager.shared.showNavigator(.files)
         }
     }
 
@@ -56,9 +69,6 @@ class FolderManager: ObservableObject {
         // Start security-scoped access
         securityScopedAccess = url.startAccessingSecurityScopedResource()
         folderURL = url
-        withAnimation(Motion.standard) {
-            isShowingFolderSidebar = true
-        }
 
         // Initial tree scan happens off-main so opening a folder with thousands of files doesn't
         // freeze the UI. We keep `refreshFileTree` callable synchronously for the
@@ -111,9 +121,7 @@ class FolderManager: ObservableObject {
 
         folderURL = nil
         fileTree = []
-        withAnimation(Motion.standard) {
-            isShowingFolderSidebar = false
-        }
+        expandedDirectoryIDs = []
     }
 
     func restoreFolder() {
@@ -207,6 +215,26 @@ class FolderManager: ObservableObject {
         var result: [URL] = []
         collectFiles(from: fileTree, into: &result)
         return result
+    }
+
+    /// The id of the tree item for `url`, if the open folder contains it.
+    func itemID(for url: URL) -> String? {
+        itemIDsByPath[url.standardizedFileURL.path]
+    }
+
+    private func indexFileTree() {
+        var items: [String: FileTreeItem] = [:]
+        var ids: [String: String] = [:]
+        func visit(_ nodes: [FileTreeItem]) {
+            for node in nodes {
+                items[node.id] = node
+                ids[node.url.standardizedFileURL.path] = node.id
+                if let children = node.children { visit(children) }
+            }
+        }
+        visit(fileTree)
+        itemsByID = items
+        itemIDsByPath = ids
     }
 
     private func collectFiles(from items: [FileTreeItem], into result: inout [URL]) {

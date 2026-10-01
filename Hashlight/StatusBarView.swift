@@ -40,7 +40,6 @@ struct StatusBarView: View {
                         .pickerStyle(.inline)
                     } label: {
                         Image(systemName: settings.contentAlignment.icon)
-                            .font(.system(size: 11))
                             .foregroundStyle(settings.contentAlignment != .left ? .secondary : Color(NSColor.tertiaryLabelColor))
                     }
                     .menuStyle(.borderlessButton)
@@ -70,20 +69,19 @@ struct StatusBarView: View {
                         .disabled(settings.zoomLevel == 1.0)
                     } label: {
                         Text("\(Int(settings.zoomLevel * 100))%")
-                            .font(.system(size: 11))
                             .foregroundStyle(settings.zoomLevel != 1.0 ? .secondary : Color(NSColor.tertiaryLabelColor))
                     }
                     .menuStyle(.borderlessButton)
                     .fixedSize()
+                    .help("Zoom")
 
                     Text(document.detectedEncoding)
-                        .font(.system(size: 11))
                         .foregroundStyle(Color(NSColor.tertiaryLabelColor))
                 }
             }
-            .padding(.horizontal, 16)
-            .frame(height: 24)
-            .background(.ultraThinMaterial)
+            .font(.callout)
+            .padding(.horizontal, 14)
+            .padding(.vertical, 5)
         }
     }
 
@@ -99,7 +97,6 @@ private struct DocumentStatsText: View {
 
     var body: some View {
         Text("\(stats.words) words  \u{00B7}  \(stats.characters) chars  \u{00B7}  \(stats.readingTime) min read")
-            .font(.system(size: 11))
             .foregroundStyle(.secondary)
             .lineLimit(1)
             .onAppear { stats = Self.compute(content) }
