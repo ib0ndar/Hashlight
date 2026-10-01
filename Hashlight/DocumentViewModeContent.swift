@@ -36,7 +36,8 @@ struct DocumentViewModeContent: View {
             contentAlignment: settings.contentAlignment,
             contentWidth: settings.contentWidth,
             pageMargin: settings.pageMargin,
-            tableColumnConfiguration: settings.tableColumnConfiguration
+            tableColumnConfiguration: settings.tableColumnConfiguration,
+            showsFrontmatter: settings.showsFrontmatter
         )
         .onAppear {
             DispatchQueue.main.async {

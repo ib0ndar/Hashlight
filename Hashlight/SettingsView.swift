@@ -13,7 +13,7 @@ enum SettingsPane: String, CaseIterable {
     var height: CGFloat {
         switch self {
         case .general: return 200
-        case .viewing: return 540
+        case .viewing: return 690
         case .tables: return 360
         }
     }
@@ -226,6 +226,14 @@ struct ViewingSettingsPane: View {
                 Text("Layout")
             } footer: {
                 Text("Set the text column's maximum width, horizontal page margin, and alignment. Full uses the available pane width; every preset shrinks to fit a narrow pane. Zoom is in the View menu (⌘= / ⌘− / ⌘0).")
+            }
+
+            Section {
+                Toggle("Show frontmatter", isOn: $settings.showsFrontmatter)
+            } header: {
+                Text("Document")
+            } footer: {
+                Text("A YAML block at the top of a file is shown as a folded card labelled with its title. Off, the document starts at its first heading or paragraph.")
             }
         }
         .formStyle(.grouped)

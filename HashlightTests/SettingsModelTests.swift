@@ -123,6 +123,22 @@ nonisolated final class NavigatorSettingsTests: XCTestCase {
     }
 }
 
+nonisolated final class FrontmatterSettingTests: XCTestCase {
+    @MainActor
+    func testFrontmatterIsShownUnlessTurnedOff() {
+        let scratch = ScratchDefaults()
+        XCTAssertEqual(DefaultsKeys.showsFrontmatter, "showsFrontmatter")
+        XCTAssertTrue(SettingsManager.loadShowsFrontmatter(from: scratch.defaults), "on by default")
+        XCTAssertNil(scratch.defaults.object(forKey: DefaultsKeys.showsFrontmatter), "the default writes nothing")
+
+        scratch.defaults.set(false, forKey: DefaultsKeys.showsFrontmatter)
+        XCTAssertFalse(SettingsManager.loadShowsFrontmatter(from: scratch.defaults))
+
+        scratch.defaults.set("yes", forKey: DefaultsKeys.showsFrontmatter)
+        XCTAssertTrue(SettingsManager.loadShowsFrontmatter(from: scratch.defaults), "a value of the wrong type falls back to on")
+    }
+}
+
 nonisolated final class SettingsPaneTests: XCTestCase {
     @MainActor
     func testThePaneKeyAndValuesAreStable() {

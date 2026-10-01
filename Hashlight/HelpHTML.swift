@@ -154,7 +154,7 @@ enum HelpHTML {
             <li>Mermaid diagrams and LaTeX math</li>
             <li>GitHub alerts such as <code>&gt; [!NOTE]</code></li>
             <li>Horizontal rules</li>
-            <li>YAML frontmatter, folded into a card at the top labelled with the <code>title</code> field (or "Document Info" when there is none), as in Xcode; click the row to show the YAML</li>
+            <li>YAML frontmatter, folded into a card at the top labelled with the <code>title</code> field (or "Document Info" when there is none), as in Xcode; click the row to show the YAML. Settings → Viewing → <strong>Show frontmatter</strong> hides the block entirely</li>
         </ul>
 
         <h2>Tips</h2>

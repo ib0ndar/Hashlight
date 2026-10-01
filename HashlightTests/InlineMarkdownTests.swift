@@ -569,6 +569,16 @@ nonisolated final class PreviewBehaviorTests: XCTestCase {
         }
     }
 
+    /// Turns the frontmatter setting on for the test (the host app's defaults may have it off)
+    /// and returns a closure that restores the previous value.
+    @MainActor
+    private func showFrontmatterForThisTest() -> () -> Void {
+        let settings = SettingsManager.shared
+        let previous = settings.showsFrontmatter
+        settings.showsFrontmatter = true
+        return { settings.showsFrontmatter = previous }
+    }
+
     @MainActor
     private func show(_ content: String, at url: URL) -> MarkdownDocument {
         let document = MarkdownDocument(url: url, content: content)
@@ -643,7 +653,11 @@ nonisolated final class PreviewBehaviorTests: XCTestCase {
     @MainActor
     func testFrontmatterStartsCollapsedAndOpensFromItsHeader() throws {
         let restore = preserveDocumentState()
-        defer { restore() }
+        let restoreSetting = showFrontmatterForThisTest()
+        defer {
+            restoreSetting()
+            restore()
+        }
         let source = "---\ntitle: \"Rendering check\"\nauthor: Hashlight\n---\n\n# Body\n"
         let url = FileManager.default.temporaryDirectory.appendingPathComponent("hashlight-frontmatter-\(UUID().uuidString).md")
         _ = show(source, at: url)
@@ -693,7 +707,11 @@ nonisolated final class PreviewBehaviorTests: XCTestCase {
     @MainActor
     func testFrontmatterWithoutATitleUsesAGenericLabelAndListsTheKeys() throws {
         let restore = preserveDocumentState()
-        defer { restore() }
+        let restoreSetting = showFrontmatterForThisTest()
+        defer {
+            restoreSetting()
+            restore()
+        }
         let source = "---\nauthor: Hashlight\ntags: a, b\n---\n\n# Body\n"
         let url = FileManager.default.temporaryDirectory.appendingPathComponent("hashlight-frontmatter-\(UUID().uuidString).md")
         _ = show(source, at: url)
@@ -703,6 +721,34 @@ nonisolated final class PreviewBehaviorTests: XCTestCase {
         let textView = try XCTUnwrap(harness.textView)
         XCTAssertTrue(textView.string.contains(FrontmatterFold.collapsedMarker + " Document Info   author, tags\n"), textView.string)
         XCTAssertFalse(textView.string.contains("Hashlight\n"))
+    }
+
+    @MainActor
+    func testTheFrontmatterSettingRemovesTheBlockEntirely() throws {
+        let restore = preserveDocumentState()
+        let restoreSetting = showFrontmatterForThisTest()
+        defer {
+            restoreSetting()
+            restore()
+        }
+        let settings = SettingsManager.shared
+        let source = "---\ntitle: Rendering check\nauthor: Hashlight\n---\n\n# Body\n"
+        let url = FileManager.default.temporaryDirectory.appendingPathComponent("hashlight-frontmatter-\(UUID().uuidString).md")
+        _ = show(source, at: url)
+
+        let harness = PreviewHarness()
+        waitUntil("the document renders", in: harness) { harness.textView?.string.contains("Body") == true }
+        let textView = try XCTUnwrap(harness.textView)
+        XCTAssertTrue(textView.string.contains(FrontmatterFold.collapsedMarker))
+
+        // Off: no header, no YAML; the document starts at its first element.
+        settings.showsFrontmatter = false
+        waitUntil("the block disappears", in: harness) { harness.textView?.string.contains(FrontmatterFold.collapsedMarker) == false }
+        XCTAssertFalse(textView.string.contains("author"))
+        XCTAssertTrue(textView.string.trimmingCharacters(in: .whitespacesAndNewlines).hasPrefix("Body"), textView.string)
+
+        settings.showsFrontmatter = true
+        waitUntil("the block returns", in: harness) { harness.textView?.string.contains(FrontmatterFold.collapsedMarker) == true }
     }
 
     func testYAMLScalarsLoseMatchingQuotesOnly() {

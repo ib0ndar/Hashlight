@@ -132,6 +132,7 @@ enum DefaultsKeys {
     static let contentAlignment = "contentAlignment"
     static let contentWidth = "contentWidth"
     static let pageMargin = "pageMargin"
+    static let showsFrontmatter = "showsFrontmatter"
     static let tableColumnConfiguration = MarkdownTableColumnPreferences.appKey
     static let zoomLevel = "zoomLevel"
 
@@ -213,6 +214,14 @@ class SettingsManager: ObservableObject {
     @Published var pageMargin: PageMargin {
         didSet {
             UserDefaults.standard.set(pageMargin.rawValue, forKey: DefaultsKeys.pageMargin)
+        }
+    }
+
+    /// Whether a document's leading YAML block is shown (as a folded card). Off, the preview
+    /// starts at the first content element as if the block were not there.
+    @Published var showsFrontmatter: Bool {
+        didSet {
+            UserDefaults.standard.set(showsFrontmatter, forKey: DefaultsKeys.showsFrontmatter)
         }
     }
 
@@ -368,6 +377,11 @@ class SettingsManager: ObservableObject {
     /// panes: a shown outline becomes a visible Outline navigator; otherwise an open folder (its
     /// pane was always shown) becomes a visible Files navigator. The migrated values are written
     /// back and the legacy key is removed, so this runs once.
+    /// On unless it was turned off; the key is written only when the setting changes.
+    static func loadShowsFrontmatter(from defaults: UserDefaults) -> Bool {
+        defaults.object(forKey: DefaultsKeys.showsFrontmatter) as? Bool ?? true
+    }
+
     static func loadNavigatorState(from defaults: UserDefaults) -> (mode: NavigatorMode, isVisible: Bool) {
         let savedMode = defaults.string(forKey: DefaultsKeys.navigatorMode).flatMap(NavigatorMode.init(rawValue:))
         let savedVisibility = defaults.object(forKey: DefaultsKeys.navigatorVisible) as? Bool
@@ -420,6 +434,8 @@ class SettingsManager: ObservableObject {
 
         let savedPageMargin = UserDefaults.standard.string(forKey: DefaultsKeys.pageMargin) ?? PageMargin.normal.rawValue
         self.pageMargin = PageMargin(rawValue: savedPageMargin) ?? .normal
+
+        self.showsFrontmatter = Self.loadShowsFrontmatter(from: .standard)
 
         let savedDockIconMode = UserDefaults.standard.string(forKey: DefaultsKeys.dockIconMode) ?? DockIconMode.system.rawValue
         self.dockIconMode = DockIconMode(rawValue: savedDockIconMode) ?? .system

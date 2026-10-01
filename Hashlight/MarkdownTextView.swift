@@ -18,6 +18,8 @@ struct MarkdownTextView: NSViewRepresentable {
     let fixedFontID: String
     let theme: PreviewTheme
     let zoomLevel: CGFloat
+    /// Whether a leading YAML block is rendered (as a folded card) or left out entirely.
+    let showsFrontmatter: Bool
     let initialScrollPosition: CGFloat
     let onScrollPositionChanged: ((CGFloat) -> Void)?
     let onMatchCountChanged: ((Int) -> Void)?
@@ -32,7 +34,7 @@ struct MarkdownTextView: NSViewRepresentable {
     let pageMargin: SettingsManager.PageMargin
     let tableColumnConfiguration: MarkdownTableColumnConfiguration
 
-    init(content: String, baseURL: URL?, directoryBookmark: Data? = nil, documentId: UUID, scrollToHeadingId: Binding<String?>, searchText: String, currentMatchIndex: Int, mainFontID: String, fixedFontID: String, theme: PreviewTheme, zoomLevel: CGFloat = 1.0, initialScrollPosition: CGFloat = 0, onScrollPositionChanged: ((CGFloat) -> Void)? = nil, onMatchCountChanged: ((Int) -> Void)? = nil, contentAlignment: SettingsManager.ContentAlignment = .left, contentWidth: SettingsManager.ContentWidth = .medium, pageMargin: SettingsManager.PageMargin = .normal, tableColumnConfiguration: MarkdownTableColumnConfiguration = .defaults) {
+    init(content: String, baseURL: URL?, directoryBookmark: Data? = nil, documentId: UUID, scrollToHeadingId: Binding<String?>, searchText: String, currentMatchIndex: Int, mainFontID: String, fixedFontID: String, theme: PreviewTheme, zoomLevel: CGFloat = 1.0, initialScrollPosition: CGFloat = 0, onScrollPositionChanged: ((CGFloat) -> Void)? = nil, onMatchCountChanged: ((Int) -> Void)? = nil, contentAlignment: SettingsManager.ContentAlignment = .left, contentWidth: SettingsManager.ContentWidth = .medium, pageMargin: SettingsManager.PageMargin = .normal, tableColumnConfiguration: MarkdownTableColumnConfiguration = .defaults, showsFrontmatter: Bool = true) {
         self.content = content
         self.baseURL = baseURL
         self.directoryBookmark = directoryBookmark
@@ -51,11 +53,12 @@ struct MarkdownTextView: NSViewRepresentable {
         self.contentWidth = contentWidth
         self.pageMargin = pageMargin
         self.tableColumnConfiguration = tableColumnConfiguration
+        self.showsFrontmatter = showsFrontmatter
     }
 
     /// Everything besides content + zoom that changes what gets built.
     private var styleKey: String {
-        "\(mainFontID)-\(fixedFontID)-\(contentWidth.rawValue)-\(theme.cacheKey)-\(tableColumnConfiguration.cacheKey)"
+        "\(mainFontID)-\(fixedFontID)-\(contentWidth.rawValue)-\(theme.cacheKey)-\(tableColumnConfiguration.cacheKey)-\(showsFrontmatter ? "fm" : "nofm")"
     }
 
     func makeNSView(context: Context) -> NSScrollView {
@@ -803,6 +806,9 @@ struct MarkdownTextView: NSViewRepresentable {
         }
 
         for element in elements {
+            // With frontmatter off the document starts at its first content element.
+            if case .frontmatter = element, !showsFrontmatter { continue }
+
             let startPos = result.length
 
             // Elements whose appearance depends on an out-of-band async resource (remote images,
