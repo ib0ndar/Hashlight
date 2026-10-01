@@ -91,7 +91,7 @@ class PrintManager {
             case .codeBlock(let code, _): appendCodeBlock(code: code, to: result)
             case .mermaidBlock(let code): appendCodeBlock(code: "[mermaid]\n" + code, to: result)
             case .displayMath(let latex): appendCodeBlock(code: "[math]\n" + latex, to: result)
-            case .table(let rows): appendTable(rows: rows, to: result)
+            case .table(let rows, _): appendTable(rows: rows, to: result)
             case .image(let alt, let path):
                 appendParagraph(text: "[Image: \(alt.isEmpty ? path : alt)]", to: result)
             case .horizontalRule: appendHorizontalRule(to: result)

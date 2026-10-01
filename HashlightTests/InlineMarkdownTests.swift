@@ -1355,4 +1355,122 @@ nonisolated final class MarkdownTableColumnLayoutTests: XCTestCase {
             .init(id: "duplicate", name: "Two", weight: 1, words: [])
         ]))
     }
+
+    func testContentSizedColumnsTakeTheirNaturalWidthWhenTheyFit() {
+        let widths = MarkdownTableColumnLayout.fittedWidths(natural: [60, 120, 90], words: [40, 80, 60], minimum: 64, available: 700)
+        XCTAssertEqual(widths, [64, 120, 90], "a column is never narrower than the minimum, and the table shrinks to its content")
+    }
+
+    func testColumnsThatDoNotFitShareTheRestEqually() {
+        // Xcode 27's own measurements of fixtures/reader-layout.md (natural widths in points,
+        // its 4em minimum, 1074 pt available) and the widths it draws: 131 132 95 129 98 62 54 131 131 120.
+        let natural: [CGFloat] = [130, 700, 95, 129, 98, 61, 54, 135, 134, 120]
+        let widths = MarkdownTableColumnLayout.fittedWidths(natural: natural, words: Array(repeating: 0, count: 10), minimum: 52, available: 1074)
+        XCTAssertEqual(widths.reduce(0, +), 1074, accuracy: 0.01)
+        for (index, expected) in [129.25, 129.25, 95, 129, 98, 61, 54, 129.25, 129.25, 120].enumerated() {
+            XCTAssertEqual(widths[index], CGFloat(expected), accuracy: 0.01, "column \(index)")
+        }
+    }
+
+    func testAWordIsKeptWholeWithRoomFromColumnsThatWrapAnyway() {
+        // Two prose columns (longest word 80) and an address column whose one token needs 140.
+        // The shared level alone gives each 100 and splits the address; the prose gives way.
+        let widths = MarkdownTableColumnLayout.fittedWidths(natural: [900, 140, 900], words: [80, 140, 80], minimum: 64, available: 300)
+        XCTAssertEqual(widths[0], 80, accuracy: 0.01)
+        XCTAssertEqual(widths[1], 140, accuracy: 0.01)
+        XCTAssertEqual(widths[2], 80, accuracy: 0.01)
+
+        // Not enough room to keep the token whole: the shared widths stay.
+        let shared = MarkdownTableColumnLayout.fittedWidths(natural: [900, 900], words: [64, 500], minimum: 64, available: 400)
+        XCTAssertEqual(shared[0], 200, accuracy: 0.01)
+        XCTAssertEqual(shared[1], 200, accuracy: 0.01)
+    }
+
+    func testWordsAreKeptWholeSmallestShortfallFirst() {
+        // Shared level 125. Column 2 (needs 160) is repaired from the prose columns; column 3
+        // (needs 170) only if room is left, which it is: column 1's short words let it narrow.
+        let widths = MarkdownTableColumnLayout.fittedWidths(natural: [900, 300, 160, 170], words: [100, 64, 160, 170], minimum: 64, available: 500)
+        XCTAssertEqual(widths[0], 100, accuracy: 0.01)
+        XCTAssertEqual(widths[1], 70, accuracy: 0.01)
+        XCTAssertEqual(widths[2], 160, accuracy: 0.01)
+        XCTAssertEqual(widths[3], 170, accuracy: 0.01)
+
+        // A column that fits on one line is never narrowed to save a word elsewhere.
+        let kept = MarkdownTableColumnLayout.fittedWidths(natural: [90, 300], words: [40, 300], minimum: 64, available: 300)
+        XCTAssertEqual(kept[0], 90, accuracy: 0.01)
+        XCTAssertEqual(kept[1], 210, accuracy: 0.01)
+    }
+
+    func testTooManyColumnsShareTheWidthAndNeverOverflow() {
+        let widths = MarkdownTableColumnLayout.fittedWidths(
+            natural: Array(repeating: 90, count: 24),
+            words: Array(repeating: 70, count: 24),
+            minimum: 64,
+            available: 690
+        )
+        XCTAssertEqual(widths.reduce(0, +), 690, accuracy: 0.01)
+        XCTAssertTrue(widths.allSatisfy { abs($0 - 690.0 / 24) < 0.01 })
+    }
+
+    func testASpanningRowWidensANarrowTableUpToTheAvailableWidth() {
+        XCTAssertEqual(
+            MarkdownTableColumnLayout.fittedWidths(natural: [100, 100], words: [50, 50], minimum: 64, spanning: 300, available: 700),
+            [150, 150]
+        )
+        let capped = MarkdownTableColumnLayout.fittedWidths(natural: [100, 100], words: [50, 50], minimum: 64, spanning: 900, available: 700)
+        XCTAssertEqual(capped.reduce(0, +), 700, accuracy: 0.01)
+        XCTAssertEqual(
+            MarkdownTableColumnLayout.fittedWidths(natural: [100, 100], words: [50, 50], minimum: 64, spanning: 150, available: 700),
+            [100, 100]
+        )
+    }
+
+    @MainActor
+    func testColumnWeightingIsOffUntilTurnedOnAndReachesQuickLook() throws {
+        XCTAssertEqual(DefaultsKeys.tableColumnWeightsEnabled, "markdownTableColumnWeightsEnabled")
+        XCTAssertEqual(MarkdownTableColumnPreferences.sharedEnabledKey, "weights-enabled")
+
+        let suffix = UUID().uuidString
+        let appDomain = "io.github.ib0ndar.hashlight.tests.app.\(suffix)"
+        let quickLookDomain = "io.github.ib0ndar.hashlight.tests.ql.\(suffix)"
+        let appDefaults = try XCTUnwrap(UserDefaults(suiteName: appDomain))
+        let quickLookDefaults = try XCTUnwrap(UserDefaults(suiteName: quickLookDomain))
+        defer {
+            appDefaults.removePersistentDomain(forName: appDomain)
+            quickLookDefaults.removePersistentDomain(forName: quickLookDomain)
+        }
+
+        XCTAssertFalse(MarkdownTableColumnPreferences.isEnabled(in: appDefaults, key: MarkdownTableColumnPreferences.appEnabledKey), "off by default")
+        XCTAssertNil(MarkdownTableColumnPreferences.enabledConfiguration(from: quickLookDefaults))
+
+        var configuration = MarkdownTableColumnConfiguration.defaults
+        configuration.categories[0].weight = 3
+        MarkdownTableColumnPreferences.persist(configuration, appDefaults: appDefaults, sharedPreferences: quickLookDefaults)
+        XCTAssertNil(MarkdownTableColumnPreferences.enabledConfiguration(from: quickLookDefaults), "saved categories alone do not turn weighting on")
+
+        MarkdownTableColumnPreferences.persistEnabled(true, appDefaults: appDefaults, sharedPreferences: quickLookDefaults)
+        XCTAssertTrue(MarkdownTableColumnPreferences.isEnabled(in: appDefaults, key: MarkdownTableColumnPreferences.appEnabledKey))
+        XCTAssertEqual(MarkdownTableColumnPreferences.enabledConfiguration(from: quickLookDefaults), configuration)
+
+        MarkdownTableColumnPreferences.persistEnabled(false, appDefaults: appDefaults, sharedPreferences: quickLookDefaults)
+        XCTAssertNil(MarkdownTableColumnPreferences.enabledConfiguration(from: quickLookDefaults))
+
+        quickLookDefaults.set("yes", forKey: MarkdownTableColumnPreferences.sharedEnabledKey)
+        XCTAssertNil(MarkdownTableColumnPreferences.enabledConfiguration(from: quickLookDefaults), "a value of the wrong type counts as off")
+    }
+
+    @MainActor
+    func testThePreviewAppliesCategoriesOnlyWhileWeightingIsOn() {
+        let settings = SettingsManager.shared
+        let previous = settings.tableColumnWeightsEnabled
+        defer { settings.tableColumnWeightsEnabled = previous }
+
+        settings.tableColumnWeightsEnabled = false
+        XCTAssertNil(settings.activeTableColumnConfiguration)
+        XCTAssertEqual(UserDefaults.standard.object(forKey: DefaultsKeys.tableColumnWeightsEnabled) as? Bool, false)
+
+        settings.tableColumnWeightsEnabled = true
+        XCTAssertEqual(settings.activeTableColumnConfiguration, settings.tableColumnConfiguration)
+        XCTAssertEqual(UserDefaults.standard.object(forKey: DefaultsKeys.tableColumnWeightsEnabled) as? Bool, true)
+    }
 }

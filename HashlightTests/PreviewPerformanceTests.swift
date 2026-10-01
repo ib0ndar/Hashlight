@@ -168,6 +168,114 @@ nonisolated final class PreviewPerformanceTests: XCTestCase {
     }
 
     @MainActor
+    func testTableColumnsAreContentSizedUnlessCategoriesAreSupplied() throws {
+        let source = "| ID | Name | Description |\n| --- | --- | --- |\n| 1 | en0 | A long description of the first item. |\n"
+        func headerBlocks(_ configuration: MarkdownTableColumnConfiguration?) throws -> [NSTextTableBlock] {
+            let harness = NativePreviewHarness()
+            harness.render(source, tableColumnConfiguration: configuration)
+            return try tableBlocks(harness).filter { $0.startingRow == 0 }
+        }
+
+        let sized = try headerBlocks(nil)
+        XCTAssertEqual(sized.count, 3)
+        XCTAssertTrue(sized.allSatisfy { $0.contentWidthValueType == .absoluteValueType })
+        let sizedWidths = sized.map(\.contentWidth)
+        XCTAssertGreaterThan(sizedWidths[2], sizedWidths[1])
+        XCTAssertLessThan(sizedWidths.reduce(0, +) + 3 * PreviewTableLayout.cellChrome, 940, "a small table shrinks to its content")
+
+        let weighted = try headerBlocks(.defaults)
+        XCTAssertTrue(weighted.allSatisfy { $0.contentWidthValueType == .percentageValueType })
+        XCTAssertEqual(weighted.map(\.contentWidth), MarkdownTableColumnLayout.widthPercentages(
+            for: [["ID", "Name", "Description"], ["1", "en0", "A long description of the first item."]],
+            configuration: .defaults
+        ))
+    }
+
+    @MainActor
+    func testACellAtItsNaturalWidthKeepsItsTextOnOneLine() throws {
+        let harness = NativePreviewHarness()
+        harness.render("| Operational State | VLAN | MAC Address |\n| --- | --- | --- |\n| Up | 1234 | `aa:bb:cc:dd:ee:ff` |\n")
+        let storage = try XCTUnwrap(harness.textView.textStorage)
+        let manager = try XCTUnwrap(harness.textView.layoutManager)
+        manager.ensureLayout(for: try XCTUnwrap(harness.textView.textContainer))
+        for text in ["Operational State", "aa:bb:cc:dd:ee:ff"] {
+            let range = (storage.string as NSString).range(of: text)
+            var lines = 0
+            manager.enumerateLineFragments(forGlyphRange: manager.glyphRange(forCharacterRange: range, actualCharacterRange: nil)) { _, _, _, _, _ in lines += 1 }
+            XCTAssertEqual(lines, 1, "\(text) should fit its column")
+        }
+    }
+
+    @MainActor
+    func testAResizeRefitsContentSizedTablesWithoutARebuild() throws {
+        let harness = NativePreviewHarness()
+        harness.render("| Name | Description |\n| --- | --- |\n| Item | \(String(repeating: "A long description that wraps. ", count: 12)) |\n")
+        let storage = try XCTUnwrap(harness.textView.textStorage)
+        let wide = try tableBlocks(harness).filter { $0.startingRow == 0 }.map(\.contentWidth)
+        let container = try XCTUnwrap(harness.textView.textContainer)
+        XCTAssertEqual(wide.reduce(0, +) + 2 * PreviewTableLayout.cellChrome, container.containerSize.width - 2 * container.lineFragmentPadding, accuracy: 0.5)
+
+        let before = storage.string
+        harness.textView.setFrameSize(NSSize(width: 500, height: 700))
+        let narrow = try tableBlocks(harness).filter { $0.startingRow == 0 }.map(\.contentWidth)
+        XCTAssertEqual(storage.string, before)
+        XCTAssertEqual(narrow.reduce(0, +) + 2 * PreviewTableLayout.cellChrome, container.containerSize.width - 2 * container.lineFragmentPadding, accuracy: 0.5)
+        XCTAssertLessThan(narrow[1], wide[1])
+        XCTAssertEqual(narrow[0], wide[0], accuracy: 0.01, "the short column keeps its natural width")
+
+        harness.textView.setFrameSize(NSSize(width: 1000, height: 700))
+        let restored = try tableBlocks(harness).filter { $0.startingRow == 0 }.map(\.contentWidth)
+        XCTAssertEqual(restored, wide, "widening again restores the fresh build's widths")
+
+        // Built while narrow (a theme change in a small window), then widened.
+        let builtNarrow = NativePreviewHarness()
+        builtNarrow.textView.setFrameSize(NSSize(width: 500, height: 700))
+        builtNarrow.render("| Name | Description |\n| --- | --- |\n| Item | \(String(repeating: "A long description that wraps. ", count: 12)) |\n")
+        builtNarrow.textView.setFrameSize(NSSize(width: 1000, height: 700))
+        XCTAssertEqual(try tableBlocks(builtNarrow).filter { $0.startingRow == 0 }.map(\.contentWidth), wide)
+    }
+
+    @MainActor
+    func testDelimiterRowAlignmentReachesTheCells() throws {
+        let harness = NativePreviewHarness()
+        harness.render("| Left | Centre | Right | Default |\n|:--|:-:|--:|---|\n| one | two | three | four |\n")
+        let storage = try XCTUnwrap(harness.textView.textStorage)
+        func alignment(of text: String) -> NSTextAlignment? {
+            let location = (storage.string as NSString).range(of: text).location
+            return (storage.attribute(.paragraphStyle, at: location, effectiveRange: nil) as? NSParagraphStyle)?.alignment
+        }
+        XCTAssertEqual(alignment(of: "Centre"), .center)
+        XCTAssertEqual(alignment(of: "two"), .center)
+        XCTAssertEqual(alignment(of: "Right"), .right)
+        XCTAssertEqual(alignment(of: "three"), .right)
+        XCTAssertEqual(alignment(of: "one"), .left)
+        XCTAssertEqual(alignment(of: "four"), .natural)
+    }
+
+    @MainActor
+    func testCellMeasurementFindsTheWidestLineAndLongestWord() {
+        let font = NSFont.systemFont(ofSize: 16)
+        let cell = NSAttributedString(string: "Short line\nA wider extraordinary line ", attributes: [.font: font])
+        let size = PreviewTableLayout.measure(cell)
+        let widest = NSAttributedString(string: "A wider extraordinary line", attributes: [.font: font]).size().width
+        let word = NSAttributedString(string: "extraordinary", attributes: [.font: font]).size().width
+        XCTAssertEqual(size.natural, widest, accuracy: 0.5)
+        XCTAssertEqual(size.longestWord, word, accuracy: 0.5)
+    }
+
+    @MainActor
+    private func tableBlocks(_ harness: NativePreviewHarness) throws -> [NSTextTableBlock] {
+        let storage = try XCTUnwrap(harness.textView.textStorage)
+        var blocks: [NSTextTableBlock] = []
+        storage.enumerateAttribute(.paragraphStyle, in: NSRange(location: 0, length: storage.length)) { value, _, _ in
+            guard let block = (value as? NSParagraphStyle)?.textBlocks.first as? NSTextTableBlock,
+                  !blocks.contains(where: { $0 === block }) else { return }
+            blocks.append(block)
+        }
+        return blocks
+    }
+
+    @MainActor
     private func assertBackgroundMatchesFreshLayout(_ harness: NativePreviewHarness) throws {
         let cached = try backgrounds(harness)
         let manager = try XCTUnwrap(harness.textView.layoutManager)
@@ -233,11 +341,12 @@ private final class NativePreviewHarness {
         coordinator.scrollView = scrollView
     }
 
-    func render(_ content: String, search: String = "") {
+    func render(_ content: String, search: String = "", tableColumnConfiguration: MarkdownTableColumnConfiguration? = nil) {
         let parent = MarkdownTextView(content: content, baseURL: nil, documentId: documentId,
                                       scrollToHeadingId: .constant(nil), searchText: search, currentMatchIndex: 0,
                                       mainFontID: PreviewFontCatalog.systemMainID,
-                                      fixedFontID: PreviewFontCatalog.systemFixedID, theme: theme)
+                                      fixedFontID: PreviewFontCatalog.systemFixedID, theme: theme,
+                                      tableColumnConfiguration: tableColumnConfiguration)
         coordinator.scheduleRebuild(for: parent, textView: textView, scrollView: scrollView, contentChanged: false, isReload: false)
     }
 }

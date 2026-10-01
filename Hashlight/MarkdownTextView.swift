@@ -1,5 +1,6 @@
 import SwiftUI
 import AppKit
+import CoreText
 
 /// NSTextView-based markdown renderer with full text selection support
 struct MarkdownTextView: NSViewRepresentable {
@@ -32,10 +33,11 @@ struct MarkdownTextView: NSViewRepresentable {
     let contentWidth: SettingsManager.ContentWidth
     /// Horizontal page inset. Applied as view layout so changing it does not rebuild Markdown.
     let pageMargin: SettingsManager.PageMargin
-    let tableColumnConfiguration: MarkdownTableColumnConfiguration
+    /// Header-category column sizing; nil (column weighting off) sizes columns to their content.
+    let tableColumnConfiguration: MarkdownTableColumnConfiguration?
     private var imageResources: PreviewImageResources?
 
-    init(content: String, baseURL: URL?, directoryBookmark: Data? = nil, documentId: UUID, scrollToHeadingId: Binding<String?>, searchText: String, currentMatchIndex: Int, mainFontID: String, fixedFontID: String, theme: PreviewTheme, zoomLevel: CGFloat = 1.0, initialScrollPosition: CGFloat = 0, onScrollPositionChanged: ((CGFloat) -> Void)? = nil, onMatchCountChanged: ((Int) -> Void)? = nil, contentAlignment: SettingsManager.ContentAlignment = .left, contentWidth: SettingsManager.ContentWidth = .medium, pageMargin: SettingsManager.PageMargin = .normal, tableColumnConfiguration: MarkdownTableColumnConfiguration = .defaults, showsFrontmatter: Bool = true) {
+    init(content: String, baseURL: URL?, directoryBookmark: Data? = nil, documentId: UUID, scrollToHeadingId: Binding<String?>, searchText: String, currentMatchIndex: Int, mainFontID: String, fixedFontID: String, theme: PreviewTheme, zoomLevel: CGFloat = 1.0, initialScrollPosition: CGFloat = 0, onScrollPositionChanged: ((CGFloat) -> Void)? = nil, onMatchCountChanged: ((Int) -> Void)? = nil, contentAlignment: SettingsManager.ContentAlignment = .left, contentWidth: SettingsManager.ContentWidth = .medium, pageMargin: SettingsManager.PageMargin = .normal, tableColumnConfiguration: MarkdownTableColumnConfiguration? = nil, showsFrontmatter: Bool = true) {
         self.content = content
         self.baseURL = baseURL
         self.directoryBookmark = directoryBookmark
@@ -59,7 +61,7 @@ struct MarkdownTextView: NSViewRepresentable {
 
     /// Everything besides content + zoom that changes what gets built.
     private var styleKey: String {
-        "\(mainFontID)-\(fixedFontID)-\(contentWidth.rawValue)-\(theme.cacheKey)-\(tableColumnConfiguration.cacheKey)-\(showsFrontmatter ? "fm" : "nofm")"
+        "\(mainFontID)-\(fixedFontID)-\(contentWidth.rawValue)-\(theme.cacheKey)-\(tableColumnConfiguration?.cacheKey ?? "content-sized")-\(showsFrontmatter ? "fm" : "nofm")"
     }
 
     func makeNSView(context: Context) -> NSScrollView {
@@ -381,6 +383,12 @@ struct MarkdownTextView: NSViewRepresentable {
             let keptScrollY = keepScrollPosition ? scrollView.contentView.bounds.origin.y : nil
             let selection = renderedDocumentId == parent.documentId ? textView.selectedRanges : []
             let (attributedString, headingRanges) = parent.buildAttributedString(coordinator: self)
+            if let container = textView.textContainer {
+                PreviewTableLayout.fitTables(
+                    in: attributedString,
+                    availableWidth: container.containerSize.width - 2 * container.lineFragmentPadding
+                )
+            }
             if let storage = textView.textStorage {
                 // Replacing a populated attributed range inserts each new attribute run before
                 // removing the old runs. Clearing first avoids quadratic run-array movement.
@@ -897,7 +905,7 @@ struct MarkdownTextView: NSViewRepresentable {
         case .codeBlock(let code, let language): appendCodeBlock(code: code, language: language, to: result)
         case .mermaidBlock(let code): appendMermaidBlock(code: code, to: result)
         case .displayMath(let latex): appendDisplayMath(latex: latex, to: result)
-        case .table(let rows): appendTable(rows: rows, to: result)
+        case .table(let rows, let alignments): appendTable(rows: rows, alignments: alignments, to: result)
         case .image(let alt, let path): appendImage(alt: alt, path: path, to: result)
         case .horizontalRule: appendHorizontalRule(to: result)
         case .blockquote(let text): appendBlockquote(text: text, to: result)
@@ -1304,10 +1312,11 @@ struct MarkdownTextView: NSViewRepresentable {
         }
     }
 
-    private func appendTable(rows: [[String]], to result: NSMutableAttributedString) {
+    private func appendTable(rows: [[String]], alignments: [MarkdownParser.TableAlignment], to result: NSMutableAttributedString) {
         guard !rows.isEmpty else { return }
 
-        let font = mainFont(size: 13 * zoomLevel)
+        // Body-size text, as in Xcode and on GitHub; the header row is semibold.
+        let font = mainFont(size: 16 * zoomLevel)
         let boldFont = font.withWeight(.semibold)
         let columnCount = rows.map { $0.count }.max() ?? 1
 
@@ -1316,80 +1325,100 @@ struct MarkdownTextView: NSViewRepresentable {
         table.setContentWidth(100, type: .percentageValueType)
         table.layoutAlgorithm = .fixedLayoutAlgorithm
         table.hidesEmptyCells = false
-        let columnWidths = MarkdownTableColumnLayout.widthPercentages(for: rows, configuration: tableColumnConfiguration)
+        // With column weighting on, the categories give each column a percentage of the text
+        // column. Off, columns are sized to their content: measured here, fitted to the text
+        // column's width by PreviewTableLayout.fitTables after the build and on every resize.
+        let weightedWidths = tableColumnConfiguration.map {
+            MarkdownTableColumnLayout.widthPercentages(for: rows, configuration: $0)
+        }
+        var naturalText = [CGFloat](repeating: 0, count: columnCount)
+        var longestWord = [CGFloat](repeating: 0, count: columnCount)
+        var spanningText: CGFloat = 0
+        let measurer = weightedWidths == nil ? TableCellMeasurer() : nil
+        let minimumWidth = PreviewTableLayout.minimumColumnEms * font.pointSize
+        // Words narrower than this leave a column at its minimum width, so they need no measuring.
+        let minimumWord = minimumWidth - PreviewTableLayout.cellWidth(forText: 0)
 
         let borderColor = theme.selectionColor
         let tableStart = result.length
 
         for (rowIndex, row) in rows.enumerated() {
             let isHeader = rowIndex == 0
+            // A summary row (first cell filled, the rest empty) becomes one cell across the table.
+            let isFullSpan = MarkdownParser.isFullSpanTableRow(row, rowIndex: rowIndex)
+            let cells = isFullSpan ? [row[0]] : (0..<columnCount).map { $0 < row.count ? row[$0] : "" }
 
-            // "Populated first cell, empty trailing cells" → render as a single full-width
-            // cell. Convention used in many docs to create summary/footer rows that visually
-            // span the table; CommonMark has no syntax for it, so we infer the intent.
-            let trimmed = row.map { $0.trimmingCharacters(in: .whitespaces) }
-            let isFullSpan = row.count > 1 && !trimmed[0].isEmpty
-                && trimmed.dropFirst().allSatisfy({ $0.isEmpty })
-
-            if isFullSpan {
-                let block = NSTextTableBlock(table: table, startingRow: rowIndex, rowSpan: 1, startingColumn: 0, columnSpan: columnCount)
-                block.setBorderColor(borderColor)
-                block.setWidth(0.5, type: .absoluteValueType, for: .border)
-                block.setWidth(6, type: .absoluteValueType, for: .padding)
-                if rowIndex % 2 == 0 {
-                    block.backgroundColor = theme.raisedBackgroundColor
+            for (colIndex, cellText) in cells.enumerated() {
+                let block = NSTextTableBlock(
+                    table: table,
+                    startingRow: rowIndex,
+                    rowSpan: 1,
+                    startingColumn: colIndex,
+                    columnSpan: isFullSpan ? columnCount : 1
+                )
+                if let weightedWidths, !isFullSpan {
+                    block.setContentWidth(weightedWidths[colIndex], type: .percentageValueType)
                 }
-
-                let cellStyle = NSMutableParagraphStyle()
-                cellStyle.textBlocks = [block]
-                cellStyle.lineSpacing = 2
-                cellStyle.paragraphSpacingBefore = 2
-                cellStyle.paragraphSpacing = 2
-
-                let attrs: [NSAttributedString.Key: Any] = [
-                    .font: font,
-                    .foregroundColor: theme.textColor,
-                    .paragraphStyle: cellStyle
-                ]
-
-                let formattedCell = formatInlineMarkdown(row[0], attributes: attrs)
-                result.append(formattedCell)
-                result.append(NSAttributedString(string: "\n", attributes: attrs))
-                continue
-            }
-
-            for colIndex in 0..<columnCount {
-                let cellText = colIndex < row.count ? row[colIndex] : ""
-
-                let block = NSTextTableBlock(table: table, startingRow: rowIndex, rowSpan: 1, startingColumn: colIndex, columnSpan: 1)
-                block.setContentWidth(columnWidths[colIndex], type: .percentageValueType)
-
                 block.setBorderColor(borderColor)
-                block.setWidth(0.5, type: .absoluteValueType, for: .border)
-                block.setWidth(6, type: .absoluteValueType, for: .padding)
-
+                block.setWidth(PreviewTableLayout.borderWidth, type: .absoluteValueType, for: .border)
+                for edge in [NSRectEdge.minX, .maxX] {
+                    block.setWidth(PreviewTableLayout.horizontalPadding, type: .absoluteValueType, for: .padding, edge: edge)
+                }
+                for edge in [NSRectEdge.minY, .maxY] {
+                    block.setWidth(PreviewTableLayout.verticalPadding, type: .absoluteValueType, for: .padding, edge: edge)
+                }
                 if isHeader {
-                    block.backgroundColor = theme.selectionColor.withAlphaComponent(0.65)
-                } else if rowIndex % 2 == 0 {
-                    block.backgroundColor = theme.raisedBackgroundColor
+                    block.backgroundColor = PreviewTableLayout.headerBackground
                 }
 
                 let cellStyle = NSMutableParagraphStyle()
                 cellStyle.textBlocks = [block]
-                cellStyle.lineSpacing = 2
-                cellStyle.paragraphSpacingBefore = 2
-                cellStyle.paragraphSpacing = 2
+                cellStyle.lineSpacing = 4
+                if !isFullSpan, colIndex < alignments.count {
+                    switch alignments[colIndex] {
+                    case .center: cellStyle.alignment = .center
+                    case .right: cellStyle.alignment = .right
+                    case .left: cellStyle.alignment = .left
+                    case .none: break
+                    }
+                }
 
                 let attrs: [NSAttributedString.Key: Any] = [
                     .font: isHeader ? boldFont : font,
-                    .foregroundColor: theme.textColor,
-                    .paragraphStyle: cellStyle
+                    .foregroundColor: theme.textColor
                 ]
-
-                let formattedCell = formatInlineMarkdown(cellText, attributes: attrs)
+                let formattedCell = NSMutableAttributedString(attributedString: formatInlineMarkdown(cellText, attributes: attrs))
+                if let measurer {
+                    if isFullSpan {
+                        spanningText = max(spanningText, measurer.measure(formattedCell, knownWord: .infinity).natural)
+                    } else {
+                        let size = measurer.measure(formattedCell, knownWord: max(longestWord[colIndex], minimumWord))
+                        naturalText[colIndex] = max(naturalText[colIndex], size.natural)
+                        longestWord[colIndex] = max(longestWord[colIndex], size.longestWord)
+                    }
+                }
+                formattedCell.addAttribute(.paragraphStyle, value: cellStyle, range: NSRange(location: 0, length: formattedCell.length))
                 result.append(formattedCell)
-                result.append(NSAttributedString(string: "\n", attributes: attrs))
+                result.append(NSAttributedString(string: "\n", attributes: attrs.merging([.paragraphStyle: cellStyle]) { $1 }))
             }
+        }
+
+        let tableRange = NSRange(location: tableStart, length: result.length - tableStart)
+        var metrics: TableColumnMetrics?
+        if weightedWidths == nil {
+            let columnMetrics = TableColumnMetrics(
+                natural: naturalText.map(PreviewTableLayout.cellWidth(forText:)),
+                words: longestWord.map(PreviewTableLayout.cellWidth(forText:)),
+                minimum: minimumWidth,
+                spanning: spanningText > 0 ? PreviewTableLayout.cellWidth(forText: spanningText) : 0
+            )
+            metrics = columnMetrics
+            // A first fit for the preset width; the build's caller fits it to the real column.
+            PreviewTableLayout.apply(
+                PreviewTableLayout.widths(for: columnMetrics, available: contentWidth.points ?? 960),
+                toTableIn: tableRange,
+                of: result
+            )
         }
 
         // PreviewLayoutManager clips the cells to a rounded rectangle and strokes its outline,
@@ -1397,8 +1426,8 @@ struct MarkdownTextView: NSViewRepresentable {
         // A fresh object per table keeps adjacent tables from merging into one effective range.
         result.addAttribute(
             PreviewTextView.tableKey,
-            value: TablePayload(borderColor: borderColor),
-            range: NSRange(location: tableStart, length: result.length - tableStart)
+            value: TablePayload(borderColor: borderColor, columnMetrics: metrics),
+            range: tableRange
         )
 
         // Spacing after table
@@ -1970,6 +1999,10 @@ final class PreviewTextView: NSTextView {
         // Equality guard: setting containerSize relayouts, relayout changes our height, and
         // a height change re-enters setFrameSize → here. Same width must be a no-op.
         if abs(container.containerSize.width - width) > 0.5 {
+            // Content-sized tables follow the column's width; the resize relayouts them.
+            if let textStorage {
+                PreviewTableLayout.fitTables(in: textStorage, availableWidth: width - 2 * container.lineFragmentPadding)
+            }
             container.containerSize = NSSize(width: width, height: CGFloat.greatestFiniteMagnitude)
         }
         invalidateTextContainerOrigin()
@@ -2316,11 +2349,148 @@ nonisolated enum CodeBlockCard {
 
 /// Marks one rendered table's attributed range under `PreviewTextView.tableKey` so the layout
 /// manager can round its corners. A class (identity equality) on purpose — see appendTable.
+/// `columnMetrics` is set for content-sized tables (column weighting off).
 nonisolated final class TablePayload: NSObject {
     let borderColor: NSColor
-    init(borderColor: NSColor) {
+    let columnMetrics: TableColumnMetrics?
+    init(borderColor: NSColor, columnMetrics: TableColumnMetrics? = nil) {
         self.borderColor = borderColor
+        self.columnMetrics = columnMetrics
         super.init()
+    }
+}
+
+/// What a content-sized table needs to fit itself to any width, as whole-cell widths (text plus
+/// `PreviewTableLayout.cellChrome`): each column's widest unwrapped line and longest word, the
+/// minimum column width (4em of the table font), and the widest row that spans the table.
+nonisolated struct TableColumnMetrics: Equatable, Sendable {
+    let natural: [CGFloat]
+    let words: [CGFloat]
+    let minimum: CGFloat
+    let spanning: CGFloat
+}
+
+/// Measures table cells with CoreText. One measurer serves a whole table, so the line-break
+/// tokenizer (expensive to create) is reused across its cells.
+nonisolated final class TableCellMeasurer {
+    private let tokenizer = CFStringTokenizerCreate(nil, "" as CFString, CFRange(location: 0, length: 0), kCFStringTokenizerUnitLineBreak, nil)
+
+    /// The widest unwrapped line of `cell` and its widest unbreakable segment, in points. Lines
+    /// no wider than `knownWord` cannot hold a wider word, so their words are not measured.
+    func measure(_ cell: NSAttributedString, knownWord: CGFloat = 0) -> (natural: CGFloat, longestWord: CGFloat) {
+        let text = cell.string as NSString
+        var natural: CGFloat = 0
+        var longestWord: CGFloat = 0
+        var lineStart = 0
+        while lineStart < text.length {
+            let newline = text.range(of: "\n", range: NSRange(location: lineStart, length: text.length - lineStart))
+            let lineEnd = newline.location == NSNotFound ? text.length : newline.location
+            if lineEnd > lineStart {
+                let range = NSRange(location: lineStart, length: lineEnd - lineStart)
+                let line = range.length == text.length ? cell : cell.attributedSubstring(from: range)
+                let size = measureLine(line, knownWord: max(knownWord, longestWord))
+                natural = max(natural, size.width)
+                longestWord = max(longestWord, size.longestWord)
+            }
+            lineStart = lineEnd + 1
+        }
+        return (natural, longestWord)
+    }
+
+    private func measureLine(_ line: NSAttributedString, knownWord: CGFloat) -> (width: CGFloat, longestWord: CGFloat) {
+        let ctLine = CTLineCreateWithAttributedString(line)
+        var width = CGFloat(CTLineGetTypographicBounds(ctLine, nil, nil, nil) - CTLineGetTrailingWhitespaceWidth(ctLine))
+        var longestWord: CGFloat = 0
+
+        // CoreText does not know text attachments (images, rendered math); add their widths.
+        line.enumerateAttribute(.attachment, in: NSRange(location: 0, length: line.length)) { value, _, _ in
+            guard let attachment = value as? NSTextAttachment else { return }
+            let attachmentWidth = attachment.bounds.width > 0 ? attachment.bounds.width : (attachment.image?.size.width ?? 0)
+            width += attachmentWidth
+            longestWord = max(longestWord, attachmentWidth)
+        }
+        guard width > knownWord else { return (width, longestWord) }
+
+        let string = line.string as NSString
+        CFStringTokenizerSetString(tokenizer, string, CFRange(location: 0, length: string.length))
+        while !CFStringTokenizerAdvanceToNextToken(tokenizer).isEmpty {
+            let token = CFStringTokenizerGetCurrentTokenRange(tokenizer)
+            var end = token.location + token.length
+            while end > token.location,
+                  let scalar = Unicode.Scalar(string.character(at: end - 1)),
+                  CharacterSet.whitespaces.contains(scalar) {
+                end -= 1
+            }
+            let start = CTLineGetOffsetForStringIndex(ctLine, token.location, nil)
+            let finish = CTLineGetOffsetForStringIndex(ctLine, end, nil)
+            longestWord = max(longestWord, abs(finish - start))
+        }
+        return (width, longestWord)
+    }
+}
+
+/// Geometry of preview tables. Cells follow Xcode 27's Markdown tables: body-size text, 4 × 8
+/// pt padding, a light neutral header, no row stripes. With column weighting off the columns
+/// are sized to their content (`MarkdownTableColumnLayout.fittedWidths`): measured once per
+/// build, and fitted again whenever the text column's width changes, without a rebuild.
+nonisolated enum PreviewTableLayout {
+    static let horizontalPadding: CGFloat = 8
+    static let verticalPadding: CGFloat = 4
+    static let borderWidth: CGFloat = 0.5
+    /// A cell's width beyond its text: padding and border on both sides, and a point for TextKit
+    /// rounding the half-point borders. Line fragment padding does not apply inside table cells.
+    static var cellChrome: CGFloat { 2 * (horizontalPadding + borderWidth) + 1 }
+    /// A column never gets narrower than this many ems of the table font, unless the columns
+    /// cannot fit otherwise (Xcode's `minmax(4em, auto)`).
+    static let minimumColumnEms: CGFloat = 4
+
+    static var headerBackground: NSColor { NSColor(white: 0.5, alpha: 0.1) }
+
+    /// The widest unwrapped line of a cell and its widest unbreakable segment (the line-break
+    /// opportunities TextKit wraps at), in points, without the cell's chrome.
+    static func measure(_ cell: NSAttributedString) -> (natural: CGFloat, longestWord: CGFloat) {
+        TableCellMeasurer().measure(cell)
+    }
+
+    /// Whole-cell width for measured text: rounded up, plus a point so TextKit never wraps a
+    /// line that CoreText measured as fitting, plus the cell's chrome.
+    static func cellWidth(forText width: CGFloat) -> CGFloat {
+        ceil(width) + 1 + cellChrome
+    }
+
+    /// Fits every content-sized table in `string` to `availableWidth` (the text container's
+    /// width less its line fragment padding). It changes the tables' blocks, not the string;
+    /// the caller's storage edit or container resize invalidates the layout.
+    static func fitTables(in string: NSAttributedString, availableWidth: CGFloat) {
+        string.enumerateAttribute(PreviewTextView.tableKey, in: NSRange(location: 0, length: string.length)) { value, range, _ in
+            guard let metrics = (value as? TablePayload)?.columnMetrics else { return }
+            apply(widths(for: metrics, available: availableWidth), toTableIn: range, of: string)
+        }
+    }
+
+    static func widths(for metrics: TableColumnMetrics, available: CGFloat) -> [CGFloat] {
+        MarkdownTableColumnLayout.fittedWidths(
+            natural: metrics.natural,
+            words: metrics.words,
+            minimum: metrics.minimum,
+            spanning: metrics.spanning,
+            available: available
+        )
+    }
+
+    /// Sets each cell's content width from whole-cell column widths; a spanning cell takes the
+    /// sum of its columns. The table keeps its percentage width: cells with absolute widths do
+    /// not stretch to fill it, so it shrinks to its content. (An absolute table width equal to
+    /// the cells' sum squeezes them, because TextKit rounds each cell's half-point borders up.)
+    static func apply(_ widths: [CGFloat], toTableIn range: NSRange, of string: NSAttributedString) {
+        string.enumerateAttribute(.paragraphStyle, in: range) { value, _, _ in
+            guard let block = (value as? NSParagraphStyle)?.textBlocks.first as? NSTextTableBlock else { return }
+            let start = block.startingColumn
+            let end = min(widths.count, start + block.columnSpan)
+            guard start < end else { return }
+            let width = widths[start..<end].reduce(0, +)
+            block.setContentWidth(max(1, width - cellChrome), type: .absoluteValueType)
+        }
     }
 }
 

@@ -168,6 +168,9 @@ nonisolated enum QuickLookHTML {
             a { color: #0969da; }
             .hashlight-markdown-table { table-layout: fixed; width: 100%; }
             .hashlight-markdown-table th, .hashlight-markdown-table td { overflow-wrap: anywhere; }
+            /* As in the app: tables shrink to their content, cells use the body text size. */
+            table:not(.hashlight-markdown-table) { width: auto; max-width: 100%; }
+            th, td { font-size: inherit; padding: 4px 8px; overflow-wrap: break-word; }
             @media (prefers-color-scheme: dark) {
                 body { background-color: #1e1e1e; color: #e6e6e6; }
                 h1 { border-bottom-color: #555; }

@@ -61,7 +61,7 @@ Open .md --> Rendered document (reloads when the file changes) --> Export PDF/HT
 - **Syntax highlighting** for Swift, Python, JavaScript, TypeScript, C/C++, Bash, SQL, JSON, HTML, XML, YAML
 - **Mermaid diagrams** — flowcharts, sequence diagrams, class diagrams rendered inline
 - **LaTeX math** — inline `$...$` and block `$$...$$` via KaTeX
-- **Tables** — GitHub-flavored markdown tables with alignment and configurable column categories, matching words, priorities, and width weights
+- **Tables** — GitHub-flavored markdown tables with column alignment; columns sized to their content (long columns share the space in wide tables), or optionally by header category (configurable categories, matching words, priorities, and width weights; off by default)
 - **Nested lists** — proper indentation with different bullet styles (•, ◦, ▪, ▹)
 - **YAML frontmatter** — a leading `---` block folds into a card labelled with its `title` (or "Document Info" and the key names when there is none), as in Xcode; click the row to show the YAML, or turn the card off in Settings → Viewing → Show frontmatter
 - **Clickable links** — external URLs open in browser, relative `.md` links open as new tabs
@@ -106,7 +106,7 @@ Open .md --> Rendered document (reloads when the file changes) --> Export PDF/HT
 - **Fonts** — independently select an installed proportional font for Markdown text and a monospaced font for code and commands
 - **Adaptive icon** — a Liquid Glass `#` lit by an amber spark; on macOS 26 it follows the system's icon style (Frost by default, Ember in dark, plus Clear and Tinted)
 - **Dock icon** — keep the system's choice or always show Frost or Ember in the Dock and app switcher (Settings → General)
-- **Settings** — three panes: **General** (appearance, Dock icon, tabs), **Viewing** (themes, fonts, layout, frontmatter), and **Tables** (column categories); Settings reopens on the pane you used last
+- **Settings** — three panes: **General** (appearance, Dock icon, tabs), **Viewing** (themes, fonts, layout, frontmatter), and **Tables** (column sizing by header category, off by default); Settings reopens on the pane you used last
 - **About** — Hashlight → About Hashlight shows the version, the icon the Dock shows, and credits zMD
 
 ---

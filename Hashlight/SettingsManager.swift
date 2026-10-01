@@ -136,6 +136,7 @@ enum DefaultsKeys {
     static let showsFrontmatter = "showsFrontmatter"
     static let hidesTabBarForSingleDocument = "hidesTabBarForSingleDocument"
     static let tableColumnConfiguration = MarkdownTableColumnPreferences.appKey
+    static let tableColumnWeightsEnabled = MarkdownTableColumnPreferences.appEnabledKey
     static let zoomLevel = "zoomLevel"
 
     // MARK: DocumentManager
@@ -235,9 +236,20 @@ class SettingsManager: ObservableObject {
         }
     }
 
+    /// Whether the table column categories size columns. Off by default: columns are sized to
+    /// their content, and Quick Look leaves tables to the browser's own layout.
+    @Published var tableColumnWeightsEnabled: Bool {
+        didSet { MarkdownTableColumnPreferences.persistEnabled(tableColumnWeightsEnabled) }
+    }
+
     /// Editable table sizing rules used by Preview and copied to the Quick Look preferences domain.
     @Published var tableColumnConfiguration: MarkdownTableColumnConfiguration {
         didSet { MarkdownTableColumnPreferences.persist(tableColumnConfiguration) }
+    }
+
+    /// The configuration the preview applies: nil while column weighting is off.
+    var activeTableColumnConfiguration: MarkdownTableColumnConfiguration? {
+        tableColumnWeightsEnabled ? tableColumnConfiguration : nil
     }
 
     @Published var zoomLevel: CGFloat {
@@ -451,6 +463,10 @@ class SettingsManager: ObservableObject {
         let savedDockIconMode = UserDefaults.standard.string(forKey: DefaultsKeys.dockIconMode) ?? DockIconMode.system.rawValue
         self.dockIconMode = DockIconMode(rawValue: savedDockIconMode) ?? .system
 
+        self.tableColumnWeightsEnabled = MarkdownTableColumnPreferences.isEnabled(
+            in: .standard,
+            key: MarkdownTableColumnPreferences.appEnabledKey
+        )
         self.tableColumnConfiguration = MarkdownTableColumnPreferences.loadAppDefaults()
 
         let savedZoom = UserDefaults.standard.double(forKey: DefaultsKeys.zoomLevel)
@@ -473,6 +489,7 @@ class SettingsManager: ObservableObject {
         // Initialize Quick Look's read-only preferences snapshot on first launch and keep it
         // aligned with the app's saved settings on subsequent launches.
         MarkdownTableColumnPreferences.persist(tableColumnConfiguration)
+        MarkdownTableColumnPreferences.persistEnabled(tableColumnWeightsEnabled)
 
         // Observe NSApplication.effectiveAppearance so views observing SettingsManager re-render
         // on system theme toggle. SettingsManager.shared can be touched during HashlightApp.init —

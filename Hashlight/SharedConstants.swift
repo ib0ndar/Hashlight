@@ -167,17 +167,41 @@ nonisolated enum MarkdownTableColumnPreferences {
 #endif
     static let sharedKey = "configuration-v1"
     static let appKey = "markdownTableColumnConfiguration.v1"
+    /// Whether the categories size columns at all. Off (or absent) sizes columns to their content
+    /// in the app and leaves Quick Look tables to the browser's own layout.
+    static let sharedEnabledKey = "weights-enabled"
+    static let appEnabledKey = "markdownTableColumnWeightsEnabled"
 
     static func loadAppDefaults() -> MarkdownTableColumnConfiguration {
         load(from: .standard, key: appKey)
     }
 
-    static func loadQuickLookDefaults() -> MarkdownTableColumnConfiguration {
+    /// The configuration Quick Look applies, or nil while column weighting is off.
+    static func loadQuickLookDefaults() -> MarkdownTableColumnConfiguration? {
         let sharedPreferences = UserDefaults(suiteName: sharedDomain)
         // Refresh this process's preference cache because Quick Look may reuse the extension
         // process after Hashlight has written a newer snapshot.
         _ = sharedPreferences?.synchronize()
+        return enabledConfiguration(from: sharedPreferences)
+    }
+
+    static func enabledConfiguration(from sharedPreferences: UserDefaults?) -> MarkdownTableColumnConfiguration? {
+        guard isEnabled(in: sharedPreferences, key: sharedEnabledKey) else { return nil }
         return load(from: sharedPreferences, key: sharedKey)
+    }
+
+    static func isEnabled(in defaults: UserDefaults?, key: String) -> Bool {
+        defaults?.object(forKey: key) as? Bool ?? false
+    }
+
+    static func persistEnabled(
+        _ isEnabled: Bool,
+        appDefaults: UserDefaults = .standard,
+        sharedPreferences: UserDefaults? = UserDefaults(suiteName: sharedDomain)
+    ) {
+        appDefaults.set(isEnabled, forKey: appEnabledKey)
+        sharedPreferences?.set(isEnabled, forKey: sharedEnabledKey)
+        _ = sharedPreferences?.synchronize()
     }
 
     static func load(from defaults: UserDefaults?, key: String) -> MarkdownTableColumnConfiguration {
@@ -221,6 +245,93 @@ nonisolated enum MarkdownTableColumnLayout {
         }
         return CGFloat(configuration.categories.first(where: { $0.id == "other" })?.weight
             ?? MarkdownTableColumnConfiguration.fallbackWeight)
+    }
+
+    /// Content-sized column widths (weighting off), in points, after Xcode 27's Markdown tables
+    /// (grid columns `minmax(4em, auto)` in a table that shrinks to fit): a column whose content
+    /// fits gets its natural width, and the columns that do not fit share the rest equally.
+    /// Two changes keep cells readable. The columns never add up to more than `available` (the
+    /// minimum gives way first). And a column whose longest word would be split is widened to
+    /// keep it whole, smallest shortfall first, with room taken from columns that wrap anyway and
+    /// can narrow without splitting their own words; a column that cannot be made whole keeps its
+    /// shared width. Columns that fit on one line are never narrowed.
+    ///
+    /// - Parameters:
+    ///   - natural: each column's widest unwrapped line, as a whole-cell width.
+    ///   - words: each column's longest unbreakable segment, as a whole-cell width.
+    ///   - minimum: the narrowest a column gets while the columns fit (Xcode's 4em).
+    ///   - spanning: the natural width of the widest row that spans the table, or 0.
+    ///   - available: the width the table may take.
+    static func fittedWidths(
+        natural: [CGFloat],
+        words: [CGFloat],
+        minimum: CGFloat,
+        spanning: CGFloat = 0,
+        available: CGFloat
+    ) -> [CGFloat] {
+        let count = natural.count
+        guard count > 0, words.count == count, available.isFinite, available > 0 else {
+            return natural
+        }
+        func clean(_ value: CGFloat) -> CGFloat { value.isFinite ? max(value, 0) : 0 }
+        let floor = min(clean(minimum), available / CGFloat(count))
+        let wanted = natural.map { max(clean($0), floor) }
+
+        var widths = wanted
+        if wanted.reduce(0, +) > available {
+            // Xcode: the shared level L — columns that want less keep their width, the rest get L.
+            let shared = level(
+                where: { level in wanted.reduce(0) { $0 + max(floor, min($1, level)) } },
+                reaches: available,
+                upTo: wanted.max() ?? 0
+            )
+            widths = wanted.map { max(floor, min($0, shared)) }
+
+            // Keep words whole where the room exists.
+            let keep = zip(words, wanted).map { max(floor, min(clean($0), $1)) }
+            let receivers = widths.indices
+                .filter { keep[$0] > widths[$0] + 0.01 }
+                .sorted { keep[$0] - widths[$0] < keep[$1] - widths[$1] }
+            var repaired = Set<Int>()
+            for receiver in receivers {
+                let shortfall = keep[receiver] - widths[receiver]
+                let donors = widths.indices.filter {
+                    $0 != receiver && !repaired.contains($0) && wanted[$0] > widths[$0] + 0.01 && widths[$0] > keep[$0]
+                }
+                let spare = donors.reduce(0) { $0 + widths[$1] - keep[$1] }
+                guard spare >= shortfall else { continue }
+                // Narrow the widest donors first, down to a common level T.
+                let target = level(
+                    where: { level in -donors.reduce(0) { $0 + widths[$1] - max(keep[$1], min(widths[$1], level)) } },
+                    reaches: -shortfall,
+                    upTo: donors.map { widths[$0] }.max() ?? 0
+                )
+                for donor in donors {
+                    widths[donor] = max(keep[donor], min(widths[donor], target))
+                }
+                widths[receiver] = keep[receiver]
+                repaired.insert(receiver)
+            }
+        }
+
+        // A summary row that spans the table widens it, up to the available width.
+        let sum = widths.reduce(0, +)
+        if spanning > sum, sum > 0 {
+            let scale = min(spanning, available) / sum
+            if scale > 1 { widths = widths.map { $0 * scale } }
+        }
+        return widths
+    }
+
+    /// The largest level in 0...upper whose non-decreasing `total` stays at or below `target`.
+    private static func level(where total: (CGFloat) -> CGFloat, reaches target: CGFloat, upTo upper: CGFloat) -> CGFloat {
+        var low: CGFloat = 0
+        var high = upper
+        for _ in 0..<64 {
+            let middle = (low + high) / 2
+            if total(middle) <= target { low = middle } else { high = middle }
+        }
+        return low
     }
 
     static func widthPercentages(

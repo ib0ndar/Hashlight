@@ -1017,8 +1017,8 @@ class ExportManager {
                     xml += createCodeParagraph(text: line)
                 }
 
-            case .table(let rows):
-                xml += generateTableXML(rows: rows)
+            case .table(let rows, let alignments):
+                xml += generateTableXML(rows: rows, alignments: alignments)
 
             case .image(let alt, let path):
                 xml += createImageParagraph(path: path, alt: alt, baseURL: baseURL)
@@ -1053,7 +1053,7 @@ class ExportManager {
     }
 
     /// Emit a full `<w:tbl>` block from parsed rows. First row is treated as the header.
-    private nonisolated func generateTableXML(rows: [[String]]) -> String {
+    private nonisolated func generateTableXML(rows: [[String]], alignments: [MarkdownParser.TableAlignment] = []) -> String {
         guard !rows.isEmpty else { return "" }
         let columnCount = rows.map { $0.count }.max() ?? 1
         // Page width: 12240 - 1440 left - 1440 right = 9360 DXA
@@ -1110,6 +1110,9 @@ class ExportManager {
                 xml += "</w:tcMar>"
                 xml += "</w:tcPr>"
                 xml += "<w:p>"
+                if colIndex < alignments.count, let align = alignments[colIndex].cssValue {
+                    xml += "<w:pPr><w:jc w:val=\"\(align)\"/></w:pPr>"
+                }
                 if isHeader {
                     xml += createHeaderCellRun(text: cellText)
                 } else {

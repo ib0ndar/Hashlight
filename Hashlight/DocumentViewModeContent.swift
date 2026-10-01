@@ -36,7 +36,7 @@ struct DocumentViewModeContent: View {
             contentAlignment: settings.contentAlignment,
             contentWidth: settings.contentWidth,
             pageMargin: settings.pageMargin,
-            tableColumnConfiguration: settings.tableColumnConfiguration,
+            tableColumnConfiguration: settings.activeTableColumnConfiguration,
             showsFrontmatter: settings.showsFrontmatter
         )
         .onAppear {

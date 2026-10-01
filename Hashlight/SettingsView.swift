@@ -14,7 +14,7 @@ enum SettingsPane: String, CaseIterable {
         switch self {
         case .general: return 320
         case .viewing: return 690
-        case .tables: return 360
+        case .tables: return 440
         }
     }
 }
@@ -266,8 +266,61 @@ struct TablesSettingsPane: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
+            HStack(alignment: .firstTextBaseline, spacing: 12) {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("Size columns by header category")
+                        .font(.headline)
+                    Text("Off, each column gets the width its content needs, and in a table too wide for the page the longest columns share the space left. On, the categories below give each column its room.")
+                        .font(.callout)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                Spacer(minLength: 0)
+                Toggle("Size columns by header category", isOn: $settings.tableColumnWeightsEnabled)
+                    .toggleStyle(.switch)
+                    .labelsHidden()
+            }
+
+            Divider()
+                .padding(.vertical, 4)
+
+            categoriesSection
+                .disabled(!settings.tableColumnWeightsEnabled)
+        }
+        .padding(20)
+        .background {
+            // ⌥↑ / ⌥↓ move the selected category (also listed in the row menu).
+            Group {
+                Button("Move Up") { moveSelected(by: -1) }
+                    .keyboardShortcut(.upArrow, modifiers: .option)
+                Button("Move Down") { moveSelected(by: 1) }
+                    .keyboardShortcut(.downArrow, modifiers: .option)
+            }
+            .opacity(0)
+            .accessibilityHidden(true)
+            .disabled(!settings.tableColumnWeightsEnabled)
+        }
+        .sheet(item: $editorRequest) { request in
+            TableColumnCategoryEditorView(category: request.category, isNew: request.isNew) { category in
+                settings.tableColumnConfiguration = configuration.savingCategory(category)
+                selectedID = category.id
+            }
+        }
+        .confirmationDialog("Restore the default column categories?", isPresented: $isConfirmingRestore) {
+            Button("Restore Defaults", role: .destructive) {
+                settings.tableColumnConfiguration = .defaults
+                selectedID = nil
+            }
+        } message: {
+            Text("Your categories, weights, and match words are replaced by the defaults.")
+        }
+    }
+
+    private var categoriesSection: some View {
+        VStack(alignment: .leading, spacing: 8) {
             Text("Column categories")
                 .font(.headline)
+                .modifier(DimmedWhenDisabled())
             Text("Table columns get room in proportion to the weight of the first category whose words match the header. Other supplies the weight for unmatched headers; if removed, the fallback weight is 1.0. Drag rows to change the order.")
                 .font(.callout)
                 .foregroundStyle(.secondary)
@@ -309,32 +362,6 @@ struct TablesSettingsPane: View {
                 .disabled(configuration.isDefault)
             }
         }
-        .padding(20)
-        .background {
-            // ⌥↑ / ⌥↓ move the selected category (also listed in the row menu).
-            Group {
-                Button("Move Up") { moveSelected(by: -1) }
-                    .keyboardShortcut(.upArrow, modifiers: .option)
-                Button("Move Down") { moveSelected(by: 1) }
-                    .keyboardShortcut(.downArrow, modifiers: .option)
-            }
-            .opacity(0)
-            .accessibilityHidden(true)
-        }
-        .sheet(item: $editorRequest) { request in
-            TableColumnCategoryEditorView(category: request.category, isNew: request.isNew) { category in
-                settings.tableColumnConfiguration = configuration.savingCategory(category)
-                selectedID = category.id
-            }
-        }
-        .confirmationDialog("Restore the default column categories?", isPresented: $isConfirmingRestore) {
-            Button("Restore Defaults", role: .destructive) {
-                settings.tableColumnConfiguration = .defaults
-                selectedID = nil
-            }
-        } message: {
-            Text("Your categories, weights, and match words are replaced by the defaults.")
-        }
     }
 
     // Alternating stripes continue past the last row and the bottom one is clipped by the
@@ -351,15 +378,18 @@ struct TablesSettingsPane: View {
         Table(of: MarkdownTableColumnCategory.self, selection: $selectedID) {
             TableColumn("Category") { category in
                 Text(category.name.isEmpty ? "Untitled Category" : category.name)
+                    .modifier(DimmedWhenDisabled())
             }
             TableColumn("Weight") { category in
                 Text(category.weight.formatted(.number.precision(.fractionLength(0...3))))
                     .monospacedDigit()
+                    .modifier(DimmedWhenDisabled())
             }
             .width(70)
             TableColumn("Match words") { category in
                 Text("\(category.words.count)")
                     .monospacedDigit()
+                    .modifier(DimmedWhenDisabled())
             }
             .width(90)
         } rows: {
@@ -401,22 +431,38 @@ struct TablesSettingsPane: View {
             }
         }
         .onDeleteCommand(perform: removeSelected)
+        // A disabled SwiftUI Table still selects, drags, and opens its menus.
+        .allowsHitTesting(settings.tableColumnWeightsEnabled)
     }
 
     private func editSelected() {
-        guard let category = selectedCategory else { return }
+        guard settings.tableColumnWeightsEnabled, let category = selectedCategory else { return }
         editorRequest = CategoryEditorRequest(category: category, isNew: false)
     }
 
     private func removeSelected() {
-        guard let id = selectedID, configuration.category(withID: id)?.canBeRemoved == true else { return }
+        guard settings.tableColumnWeightsEnabled,
+              let id = selectedID, configuration.category(withID: id)?.canBeRemoved == true else { return }
         settings.tableColumnConfiguration = configuration.removingCategory(withID: id)
         selectedID = nil
     }
 
     private func moveSelected(by offset: Int) {
-        guard let id = selectedID else { return }
+        guard settings.tableColumnWeightsEnabled, let id = selectedID else { return }
         settings.tableColumnConfiguration = configuration.movingCategory(withID: id, by: offset)
+    }
+}
+
+/// Dims a category table cell while the table is disabled; SwiftUI's Table keeps the text as is.
+private struct DimmedWhenDisabled: ViewModifier {
+    @Environment(\.isEnabled) private var isEnabled
+
+    @ViewBuilder func body(content: Content) -> some View {
+        if isEnabled {
+            content
+        } else {
+            content.foregroundStyle(.tertiary)
+        }
     }
 }
 

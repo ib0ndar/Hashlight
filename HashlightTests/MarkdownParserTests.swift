@@ -74,18 +74,48 @@ nonisolated final class MarkdownParserTests: XCTestCase {
         let elements = MarkdownParser.shared.parse(markdown)
 
         XCTAssertEqual(elements.count, 1)
-        guard case .table(let rows) = elements[0] else {
+        guard case .table(let rows, let alignments) = elements[0] else {
             return XCTFail("Expected a single table element, got \(elements)")
         }
 
         // Separator row is consumed during parsing and never appears as data.
         XCTAssertEqual(rows, [["Header1", "Header2"], ["a", "b"], ["c", "d"]])
+        XCTAssertEqual(alignments, [.none, .none])
 
         let html = MarkdownParser.shared.toHTML(markdown, includeStyles: false)
         XCTAssertTrue(html.contains("<th>Header1</th>"))
         XCTAssertTrue(html.contains("<th>Header2</th>"))
         XCTAssertTrue(html.contains("<td>a</td>"))
         XCTAssertFalse(html.contains("<th>a</th>"))
+    }
+
+    @MainActor
+    func testDelimiterRowSetsColumnAlignment() {
+        let markdown = "| L | C | R | N |\n|:---|:---:|---:|---|\n| 1 | 2 | 3 | 4 |"
+        guard case .table(_, let alignments) = MarkdownParser.shared.parse(markdown).first else {
+            return XCTFail("Expected a table")
+        }
+        XCTAssertEqual(alignments, [.left, .center, .right, .none])
+
+        let html = MarkdownParser.shared.toHTML(markdown, includeStyles: false)
+        XCTAssertTrue(html.contains(#"<th style="text-align:center">C</th>"#))
+        XCTAssertTrue(html.contains(#"<td style="text-align:right">3</td>"#))
+        XCTAssertTrue(html.contains("<td>1</td>"), "left is the default and needs no style")
+        XCTAssertTrue(html.contains("<td>4</td>"))
+
+        // Alignment is part of the element's identity, so a cached rendering is not reused.
+        let plain = MarkdownParser.shared.parse("| L | C | R | N |\n|---|---|---|---|\n| 1 | 2 | 3 | 4 |")
+        XCTAssertNotEqual(plain.first?.id, MarkdownParser.shared.parse(markdown).first?.id)
+    }
+
+    @MainActor
+    func testOnlyBodyRowsSpanTheTable() {
+        let markdown = "| Summary | | |\n| --- | --- | --- |\n| a | b | c |\n| Total | | |"
+        let html = MarkdownParser.shared.toHTML(markdown, includeStyles: false)
+        XCTAssertTrue(html.contains("<th>Summary</th><th></th><th></th>"), "the header row defines the columns")
+        XCTAssertTrue(html.contains(#"<td colspan="3">Total</td>"#))
+        XCTAssertFalse(MarkdownParser.isFullSpanTableRow(["Summary", "", ""], rowIndex: 0))
+        XCTAssertTrue(MarkdownParser.isFullSpanTableRow(["Total", "", ""], rowIndex: 2))
     }
 
     @MainActor

@@ -98,6 +98,8 @@ nonisolated final class QuickLookHTMLTests: XCTestCase {
         """)
         XCTAssertFalse(html.contains("hashlight-markdown-table"))
         XCTAssertFalse(html.contains("<colgroup>"))
+        // Without weights, Quick Look shrinks tables to their content, as the app does.
+        XCTAssertTrue(QuickLookHTML.makeOfflineSafe(html).contains("table:not(.hashlight-markdown-table) { width: auto; max-width: 100%; }"))
     }
 
     func testParserStylesheetStillLacksDarkMode() {

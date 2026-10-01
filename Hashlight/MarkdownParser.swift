@@ -23,6 +23,53 @@ nonisolated final class MarkdownParser: Sendable {
 
     // MARK: - Element Types
 
+    /// A table column's alignment from its delimiter cell: `:--` left, `:-:` center, `--:` right,
+    /// `---` none (rendered left).
+    nonisolated enum TableAlignment: String, Sendable {
+        case none, left, center, right
+
+        init(delimiterCell cell: String) {
+            let trimmed = cell.trimmingCharacters(in: .whitespaces)
+            switch (trimmed.hasPrefix(":"), trimmed.count > 1 && trimmed.hasSuffix(":")) {
+            case (true, true): self = .center
+            case (false, true): self = .right
+            case (true, false): self = .left
+            case (false, false): self = .none
+            }
+        }
+
+        /// The CSS `text-align` value, nil for the default (left).
+        var cssValue: String? {
+            switch self {
+            case .center: return "center"
+            case .right: return "right"
+            case .none, .left: return nil
+            }
+        }
+    }
+
+    /// The cells of one table line: split on pipes, with the outer pipes' empty cells dropped.
+    static func tableCells(_ line: String) -> [String] {
+        // Split by pipe while preserving interior empty cells (e.g. "| a |  | c |" has 3 columns).
+        // `split(separator:omittingEmptySubsequences:)` with false keeps them; then we strip only
+        // the leading/trailing empties that come from the outer pipes.
+        var cells = line
+            .split(separator: "|", omittingEmptySubsequences: false)
+            .map { $0.trimmingCharacters(in: .whitespaces) }
+        if line.hasPrefix("|"), cells.first == "" { cells.removeFirst() }
+        if line.hasSuffix("|"), cells.last == "" { cells.removeLast() }
+        return cells
+    }
+
+    /// Whether a table row is a summary row that spans the table: its first cell is filled and
+    /// every other cell is empty. CommonMark has no syntax for spans, so the intent is inferred.
+    /// The header row never spans; it defines the columns.
+    static func isFullSpanTableRow(_ row: [String], rowIndex: Int) -> Bool {
+        guard rowIndex > 0, row.count > 1 else { return false }
+        let trimmed = row.map { $0.trimmingCharacters(in: .whitespaces) }
+        return !trimmed[0].isEmpty && trimmed.dropFirst().allSatisfy(\.isEmpty)
+    }
+
     /// The five GitHub alert kinds (`> [!NOTE]` …). Shared by every rendering backend so the
     /// title, icon, and color of a kind can't drift between preview, HTML/PDF, DOCX, and print.
     nonisolated enum AlertKind: String, CaseIterable, Sendable {
@@ -92,7 +139,7 @@ nonisolated final class MarkdownParser: Sendable {
         case codeBlock(code: String, language: String?)
         case mermaidBlock(code: String)
         case displayMath(latex: String)
-        case table(rows: [[String]])
+        case table(rows: [[String]], alignments: [TableAlignment])
         case image(alt: String, path: String)
         case horizontalRule
         case blockquote(String)
@@ -123,7 +170,9 @@ nonisolated final class MarkdownParser: Sendable {
             case .codeBlock(let code, let lang): return "code\(unit)\(lang ?? "")\(unit)\(code)"
             case .mermaidBlock(let code): return "mermaid\(unit)\(code)"
             case .displayMath(let latex): return "math\(unit)\(latex)"
-            case .table(let rows): return "table\(unit)\(rows.map { $0.joined(separator: "\u{1D}") }.joined(separator: "\u{1E}"))"
+            case .table(let rows, let alignments):
+                let alignment = alignments.map(\.rawValue).joined(separator: "\u{1D}")
+                return "table\(unit)\(alignment)\(unit)\(rows.map { $0.joined(separator: "\u{1D}") }.joined(separator: "\u{1E}"))"
             case .image(let alt, let path): return "img\(unit)\(alt)\(unit)\(path)"
             case .horizontalRule: return "hr"
             case .blockquote(let text): return "quote\(unit)\(text)"
@@ -246,25 +295,22 @@ nonisolated final class MarkdownParser: Sendable {
             // Table (supports leading whitespace)
             else if trimmedLine.hasPrefix("|") && trimmedLine.hasSuffix("|") {
                 var tableRows: [[String]] = []
+                var alignments: [TableAlignment]?
 
                 while i < lines.count && lines[i].trimmingCharacters(in: .whitespaces).hasPrefix("|") {
                     let currentLine = lines[i].trimmingCharacters(in: .whitespaces)
 
-                    // Skip separator row (contains dashes)
+                    // Skip separator rows (dashes); the first one after the header sets the
+                    // columns' alignment.
                     if isTableSeparator(currentLine) {
+                        if alignments == nil, !tableRows.isEmpty {
+                            alignments = Self.tableCells(currentLine).map(TableAlignment.init(delimiterCell:))
+                        }
                         i += 1
                         continue
                     }
 
-                    // Split by pipe while preserving interior empty cells (e.g. "| a |  | c |" has 3 columns).
-                    // `split(separator:omittingEmptySubsequences:)` with false keeps them; then we
-                    // strip only the leading/trailing empties that come from the outer pipes.
-                    var cells = currentLine
-                        .split(separator: "|", omittingEmptySubsequences: false)
-                        .map { $0.trimmingCharacters(in: .whitespaces) }
-                    if currentLine.hasPrefix("|"), cells.first == "" { cells.removeFirst() }
-                    if currentLine.hasSuffix("|"), cells.last == "" { cells.removeLast() }
-
+                    let cells = Self.tableCells(currentLine)
                     if !cells.isEmpty {
                         tableRows.append(cells)
                     }
@@ -273,7 +319,7 @@ nonisolated final class MarkdownParser: Sendable {
                 }
 
                 if !tableRows.isEmpty {
-                    elements.append(.table(rows: tableRows))
+                    elements.append(.table(rows: tableRows, alignments: alignments ?? []))
                 }
                 i -= 1 // Adjust because we'll increment at the end of the loop
             }
@@ -800,7 +846,7 @@ nonisolated final class MarkdownParser: Sendable {
             // TeX parser, so the rendered math is unchanged.
             let safeLatex = latex.replacingOccurrences(of: "</", with: "<\\/")
             return "<div class=\"math-display\"><script type=\"math/tex; mode=display\">\(safeLatex)</script></div>\n"
-        case .table(let rows):
+        case .table(let rows, let alignments):
             let columnCount = rows.map(\.count).max() ?? 0
             let tableClass = tableColumnConfiguration == nil ? "" : " class=\"hashlight-markdown-table\""
             var html = "<table\(tableClass)>\n"
@@ -823,17 +869,15 @@ nonisolated final class MarkdownParser: Sendable {
             for (rowIndex, row) in rows.enumerated() {
                 html += "<tr>"
                 let tag = rowIndex == 0 ? "th" : "td"
-                // Detect "populated first cell, all others empty" rows (a common convention for
-                // summary/footer rows that span the full width). Emit colspan so the populated
-                // cell visually fills the row in HTML/PDF/RTF output. CommonMark doesn't have
-                // syntax for this; we infer it.
-                let trimmed = row.map { $0.trimmingCharacters(in: .whitespaces) }
-                if row.count > 1, !trimmed[0].isEmpty,
-                   trimmed.dropFirst().allSatisfy({ $0.isEmpty }) {
-                    html += "<\(tag) colspan=\"\(row.count)\">\(formatInlineHTML(row[0]))</\(tag)>"
+                // A summary row (first cell filled, the rest empty) spans the table: colspan
+                // makes the populated cell fill the row in HTML/PDF/RTF output.
+                if Self.isFullSpanTableRow(row, rowIndex: rowIndex) {
+                    html += "<\(tag) colspan=\"\(columnCount)\">\(formatInlineHTML(row[0]))</\(tag)>"
                 } else {
-                    for cell in row {
-                        html += "<\(tag)>\(formatInlineHTML(cell))</\(tag)>"
+                    for (column, cell) in row.enumerated() {
+                        let align = column < alignments.count ? alignments[column].cssValue : nil
+                        let style = align.map { " style=\"text-align:\($0)\"" } ?? ""
+                        html += "<\(tag)\(style)>\(formatInlineHTML(cell))</\(tag)>"
                     }
                 }
                 html += "</tr>\n"
