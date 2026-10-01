@@ -652,9 +652,11 @@ nonisolated final class PreviewBehaviorTests: XCTestCase {
         waitUntil("the document renders", in: harness) { harness.textView?.string.contains("Body") == true }
         let textView = try XCTUnwrap(harness.textView)
 
-        // Collapsed by default, labelled with the document's title (unquoted); the other
-        // fields are hidden.
-        XCTAssertTrue(textView.string.contains("▸ Rendering check\n"), textView.string)
+        // Collapsed by default, labelled with the document's title (unquoted); the YAML is
+        // hidden.
+        let collapsed = FrontmatterFold.collapsedMarker + " Rendering check\n"
+        let expanded = FrontmatterFold.expandedMarker + " Rendering check\n"
+        XCTAssertTrue(textView.string.contains(collapsed), textView.string)
         XCTAssertFalse(textView.string.contains("Document Info"))
         XCTAssertFalse(textView.string.contains("author"))
 
@@ -677,14 +679,13 @@ nonisolated final class PreviewBehaviorTests: XCTestCase {
             spin(0.3)
         }
 
-        // Expanded: the title stays in the header and does not repeat as a row.
+        // Expanded: the title stays in the header and the YAML follows as written.
         try clickHeader()
-        XCTAssertTrue(textView.string.contains("▾ Rendering check\n"), textView.string)
-        XCTAssertTrue(textView.string.contains("author: Hashlight"))
-        XCTAssertFalse(textView.string.contains("title:"))
+        XCTAssertTrue(textView.string.contains(expanded), textView.string)
+        XCTAssertTrue(textView.string.contains("title: \"Rendering check\"\nauthor: Hashlight\n"))
 
         try clickHeader()
-        XCTAssertTrue(textView.string.contains("▸ Rendering check\n"))
+        XCTAssertTrue(textView.string.contains(collapsed))
         XCTAssertFalse(textView.string.contains("author"))
         XCTAssertEqual(DocumentManager.shared.openDocuments.first?.content, source, "the document must not change")
     }
@@ -700,7 +701,7 @@ nonisolated final class PreviewBehaviorTests: XCTestCase {
         let harness = PreviewHarness()
         waitUntil("the document renders", in: harness) { harness.textView?.string.contains("Body") == true }
         let textView = try XCTUnwrap(harness.textView)
-        XCTAssertTrue(textView.string.contains("▸ Document Info   author, tags\n"), textView.string)
+        XCTAssertTrue(textView.string.contains(FrontmatterFold.collapsedMarker + " Document Info   author, tags\n"), textView.string)
         XCTAssertFalse(textView.string.contains("Hashlight\n"))
     }
 

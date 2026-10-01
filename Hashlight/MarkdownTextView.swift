@@ -1010,64 +1010,45 @@ struct MarkdownTextView: NSViewRepresentable {
 
     private func appendFrontmatter(lines: [String], expanded: Bool, to result: NSMutableAttributedString) {
         guard !lines.isEmpty else { return }
+        let blockStart = result.length
 
-        let labelFont = mainFont(size: 11 * zoomLevel).withWeight(.semibold)
-        let titleFont = mainFont(size: 13 * zoomLevel).withWeight(.semibold)
-        let keyFont = mainFont(size: 12 * zoomLevel).withWeight(.medium)
-        let valueFont = mainFont(size: 12 * zoomLevel)
+        // Xcode's rendering: a bordered card holding a disclosure row labelled with the
+        // document's title (or a generic label), and, when open, the YAML as written in
+        // monospace. PreviewTextView toggles the block when the header row is clicked
+        // (frontmatterToggleKey); the pointer shows a hand over it.
+        let labelFont = mainFont(size: 12 * zoomLevel)
+        let yamlFont = fixedFont(size: 12 * zoomLevel)
+        let yamlLines = lines.map { $0.trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty }
 
-        let paragraphStyle = NSMutableParagraphStyle()
-        paragraphStyle.paragraphSpacing = 2
-        paragraphStyle.lineSpacing = 2
+        let title = yamlLines.lazy.compactMap { line -> String? in
+            guard let colon = line.firstIndex(of: ":"),
+                  line[..<colon].trimmingCharacters(in: .whitespaces).lowercased() == "title" else { return nil }
+            let value = Self.unquotedYAMLScalar(String(line[line.index(after: colon)...]))
+            return value.isEmpty ? nil : value
+        }.first
 
-        // Parse the key-value pairs once.
-        var fields: [(key: String?, value: String)] = lines.compactMap { line in
-            let trimmed = line.trimmingCharacters(in: .whitespaces)
-            guard !trimmed.isEmpty else { return nil }
-            guard let colonIndex = trimmed.firstIndex(of: ":") else { return (nil, trimmed) }
-            let key = String(trimmed[..<colonIndex]).trimmingCharacters(in: .whitespaces)
-            let value = String(trimmed[trimmed.index(after: colonIndex)...]).trimmingCharacters(in: .whitespaces)
-            return (key, value)
-        }
-
-        // The disclosure label is the document's title when the frontmatter has one (that row
-        // then moves into the header); otherwise a generic label plus, while collapsed, the
-        // list of keys.
-        let titleIndex = fields.firstIndex { $0.key?.lowercased() == "title" && !Self.unquotedYAMLScalar($0.value).isEmpty }
-        let title = titleIndex.map { Self.unquotedYAMLScalar(fields[$0].value) }
-        if let titleIndex {
-            fields.remove(at: titleIndex)
-        }
-
-        // The header is a disclosure row: PreviewTextView toggles the block when it is clicked
-        // (frontmatterToggleKey) and the pointer shows a hand over it.
-        let header = NSMutableAttributedString(string: expanded ? "▾ " : "▸ ", attributes: [
+        let header = NSMutableAttributedString(string: (expanded ? FrontmatterFold.expandedMarker : FrontmatterFold.collapsedMarker) + " ", attributes: [
             .font: labelFont,
-            .foregroundColor: theme.secondaryTextColor,
-            .paragraphStyle: paragraphStyle
+            .foregroundColor: theme.secondaryTextColor
         ])
-        if let title {
-            header.append(NSAttributedString(string: title, attributes: [
-                .font: titleFont,
-                .foregroundColor: theme.textColor,
-                .paragraphStyle: paragraphStyle
-            ]))
-        } else {
-            header.append(NSAttributedString(string: "Document Info", attributes: [
-                .font: labelFont,
-                .foregroundColor: theme.secondaryTextColor,
-                .paragraphStyle: paragraphStyle
-            ]))
-            let keys = fields.compactMap(\.key).filter { !$0.isEmpty }
-            if !expanded, !keys.isEmpty {
+        header.append(NSAttributedString(string: title ?? "Document Info", attributes: [
+            .font: labelFont,
+            .foregroundColor: theme.secondaryTextColor
+        ]))
+        if title == nil, !expanded {
+            let keys = yamlLines.compactMap { line -> String? in
+                guard let colon = line.firstIndex(of: ":") else { return nil }
+                let key = line[..<colon].trimmingCharacters(in: .whitespaces)
+                return key.isEmpty ? nil : key
+            }
+            if !keys.isEmpty {
                 var summary = keys.joined(separator: ", ")
                 if summary.count > 60 {
                     summary = String(summary.prefix(57)).trimmingCharacters(in: .whitespacesAndNewlines) + "…"
                 }
                 header.append(NSAttributedString(string: "   \(summary)", attributes: [
-                    .font: mainFont(size: 11 * zoomLevel),
-                    .foregroundColor: theme.commentColor,
-                    .paragraphStyle: paragraphStyle
+                    .font: labelFont,
+                    .foregroundColor: theme.commentColor
                 ]))
             }
         }
@@ -1075,36 +1056,47 @@ struct MarkdownTextView: NSViewRepresentable {
             PreviewTextView.frontmatterToggleKey: expanded ? "expanded" : "collapsed",
             .cursor: NSCursor.pointingHand
         ], range: NSRange(location: 0, length: header.length))
-        header.append(NSAttributedString(string: "\n", attributes: [.font: labelFont, .paragraphStyle: paragraphStyle]))
+        header.append(NSAttributedString(string: "\n", attributes: [.font: labelFont]))
+
+        // The card's padding comes from the paragraph styles, as for code blocks: spacing
+        // before the first line and after the last, indents on every line.
+        let headerStyle = NSMutableParagraphStyle()
+        headerStyle.firstLineHeadIndent = CodeBlockCard.horizontalPadding
+        headerStyle.headIndent = CodeBlockCard.horizontalPadding
+        headerStyle.tailIndent = -CodeBlockCard.horizontalPadding
+        headerStyle.paragraphSpacingBefore = CodeBlockCard.verticalPadding
+        headerStyle.paragraphSpacing = expanded ? 4 : CodeBlockCard.verticalPadding
+        header.addAttribute(.paragraphStyle, value: headerStyle, range: NSRange(location: 0, length: header.length))
         result.append(header)
 
         if expanded {
-            for field in fields {
-                if let key = field.key {
-                    result.append(NSAttributedString(string: "\(key): ", attributes: [
-                        .font: keyFont,
-                        .foregroundColor: theme.secondaryTextColor,
-                        .paragraphStyle: paragraphStyle
-                    ]))
+            for (index, line) in yamlLines.enumerated() {
+                let lineStyle = NSMutableParagraphStyle()
+                lineStyle.firstLineHeadIndent = CodeBlockCard.horizontalPadding
+                lineStyle.headIndent = CodeBlockCard.horizontalPadding
+                lineStyle.tailIndent = -CodeBlockCard.horizontalPadding
+                lineStyle.lineSpacing = 2
+                if index == yamlLines.count - 1 {
+                    lineStyle.paragraphSpacing = CodeBlockCard.verticalPadding
                 }
-                result.append(NSAttributedString(string: "\(field.value)\n", attributes: [
-                    .font: valueFont,
+                result.append(NSAttributedString(string: line + "\n", attributes: [
+                    .font: yamlFont,
                     .foregroundColor: theme.textColor,
-                    .paragraphStyle: paragraphStyle
+                    .paragraphStyle: lineStyle
                 ]))
             }
         }
 
-        // Add separator line after frontmatter
-        let separatorStyle = NSMutableParagraphStyle()
-        separatorStyle.paragraphSpacingBefore = 8
-        separatorStyle.paragraphSpacing = 16
+        // A bordered card on the page color, like Xcode's; no fill, so it stays quieter than a
+        // code block.
+        result.addAttribute(
+            PreviewTextView.cardKey,
+            value: PreviewCardPayload(style: CodeBlockCard.Style(fill: theme.backgroundColor, border: theme.selectionColor)),
+            range: NSRange(location: blockStart, length: result.length - blockStart)
+        )
 
-        result.append(NSAttributedString(string: String(repeating: "─", count: 40) + "\n", attributes: [
-            .font: NSFont.systemFont(ofSize: 10),
-            .foregroundColor: theme.selectionColor,
-            .paragraphStyle: separatorStyle
-        ]))
+        // Spacing after the card
+        result.append(NSAttributedString(string: "\n"))
     }
 
     /// A YAML scalar without its surrounding quotes, if any (`title: "Rendering check"`).
@@ -1160,15 +1152,14 @@ struct MarkdownTextView: NSViewRepresentable {
         // the card's appearance, so the layout manager draws it from the text alone. A fresh
         // object per block keeps adjacent blocks from merging into one effective range
         // (attribute runs coalesce on value equality; NSObject = identity).
-        result.addAttribute(
-            PreviewTextView.codeBlockKey,
-            value: CodeBlockPayload(
-                code: code,
-                label: label,
-                style: CodeBlockCard.Style(fill: theme.raisedBackgroundColor, border: theme.selectionColor)
-            ),
-            range: NSRange(location: blockStart, length: result.length - blockStart)
+        let payload = CodeBlockPayload(
+            code: code,
+            label: label,
+            style: CodeBlockCard.Style(fill: theme.raisedBackgroundColor, border: theme.selectionColor)
         )
+        let blockRange = NSRange(location: blockStart, length: result.length - blockStart)
+        result.addAttribute(PreviewTextView.codeBlockKey, value: payload, range: blockRange)
+        result.addAttribute(PreviewTextView.cardKey, value: payload, range: blockRange)
 
         // Add spacing after code block
         result.append(NSAttributedString(string: "\n"))
@@ -1965,6 +1956,8 @@ final class PreviewTextView: NSTextView {
     // MARK: Code-block copy button
 
     nonisolated static let codeBlockKey = NSAttributedString.Key("Hashlight.codeBlock")
+    /// A range PreviewLayoutManager draws a rounded card behind (code blocks, frontmatter).
+    nonisolated static let cardKey = NSAttributedString.Key("Hashlight.card")
     nonisolated static let tableKey = NSAttributedString.Key("Hashlight.table")
     /// Marks the frontmatter block's header row; a click on that row toggles the block.
     nonisolated static let frontmatterToggleKey = NSAttributedString.Key("Hashlight.frontmatterToggle")
@@ -2197,22 +2190,39 @@ final class PreviewTextView: NSTextView {
     }
 }
 
-/// Raw source of one rendered code block, attached to its attributed range under
-/// `PreviewTextView.codeBlockKey`, with the card the layout manager draws behind it. A class
-/// (identity equality) on purpose — see appendCodeBlock. Nonisolated, like the layout manager
-/// that reads it while drawing.
-nonisolated final class CodeBlockPayload: NSObject {
-    let code: String
-    /// The fence's language, drawn in the card's top-right corner; nil when the fence has none.
+/// A rounded card the layout manager draws behind the attributed range tagged with
+/// `PreviewTextView.cardKey`: code blocks and the folded frontmatter. A class (identity
+/// equality) on purpose, so adjacent cards do not merge into one effective range. Nonisolated,
+/// like the layout manager that reads it while drawing.
+nonisolated class PreviewCardPayload: NSObject {
+    /// Drawn in the card's top-right corner (a code block's language); nil for none.
     let label: NSAttributedString?
     let style: CodeBlockCard.Style
 
-    init(code: String, label: NSAttributedString? = nil, style: CodeBlockCard.Style = CodeBlockCard.Style(fill: .clear, border: .clear)) {
-        self.code = code
+    init(label: NSAttributedString? = nil, style: CodeBlockCard.Style) {
         self.label = label
         self.style = style
         super.init()
     }
+}
+
+/// Raw source of one rendered code block, attached to its attributed range under
+/// `PreviewTextView.codeBlockKey` for the copy button and context menu (and under `cardKey`
+/// for the drawing) — see appendCodeBlock.
+nonisolated final class CodeBlockPayload: PreviewCardPayload {
+    let code: String
+
+    init(code: String, label: NSAttributedString? = nil, style: CodeBlockCard.Style = CodeBlockCard.Style(fill: .clear, border: .clear)) {
+        self.code = code
+        super.init(label: label, style: style)
+    }
+}
+
+/// The frontmatter disclosure row's markers: filled triangles, as in Xcode, with the text
+/// presentation selector so no font renders them as emoji.
+nonisolated enum FrontmatterFold {
+    static let collapsedMarker = "\u{25B6}\u{FE0E}"
+    static let expandedMarker = "\u{25BC}\u{FE0E}"
 }
 
 /// Geometry of the code-block card, shared by the attributed text (padding through paragraph
@@ -2356,11 +2366,11 @@ nonisolated final class PreviewLayoutManager: NSLayoutManager {
         guard let storage = textStorage, storage.length > 0 else { return }
         let fullRange = NSRange(location: 0, length: storage.length)
         let shownRange = characterRange(forGlyphRange: glyphsToShow, actualGlyphRange: nil)
-        storage.enumerateAttribute(PreviewTextView.codeBlockKey, in: shownRange) { value, partialRange, _ in
-            guard let payload = value as? CodeBlockPayload else { return }
+        storage.enumerateAttribute(PreviewTextView.cardKey, in: shownRange) { value, partialRange, _ in
+            guard let payload = value as? PreviewCardPayload else { return }
             // The enumeration clips to the drawn range; the card needs the whole block.
             var blockRange = NSRange()
-            _ = storage.attribute(PreviewTextView.codeBlockKey, at: partialRange.location, longestEffectiveRange: &blockRange, in: fullRange)
+            _ = storage.attribute(PreviewTextView.cardKey, at: partialRange.location, longestEffectiveRange: &blockRange, in: fullRange)
             let glyphLocation = glyphIndexForCharacter(at: blockRange.location)
             guard let container = textContainer(forGlyphAt: glyphLocation, effectiveRange: nil),
                   let cardRect = codeBlockCardRect(forCharacterRange: blockRange, in: container) else { return }
