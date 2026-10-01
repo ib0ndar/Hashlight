@@ -2108,6 +2108,7 @@ final class PreviewTextView: NSTextView {
         }
         if payload !== hoveredCodeBlock {
             hoveredCodeBlock = payload
+            codeCopyButton.cardStyle = payload.style
             codeCopyButton.showCopyState()
         }
         // Top-right corner of the card, on the first line's row, left of the language label.
@@ -2478,9 +2479,21 @@ nonisolated final class PreviewLayoutManager: NSLayoutManager {
     }
 }
 
-/// The small hover button in a code block's top-right corner.
+/// The small hover button in a code block's top-right corner. It has no chrome of its own: it
+/// fills with the card's colour, so it blends into the card in every theme yet still hides a
+/// long first line that runs under it, and takes the card's border colour under the pointer.
 final class CodeCopyButton: NSButton {
     static let size = NSSize(width: 26, height: 22)
+    static let cornerRadius: CGFloat = 5
+
+    /// The hovered card's colours.
+    var cardStyle = CodeBlockCard.Style(fill: .clear, border: .clear) {
+        didSet { needsDisplay = true }
+    }
+
+    private var isPointerInside = false {
+        didSet { if isPointerInside != oldValue { needsDisplay = true } }
+    }
 
     convenience init(target: AnyObject, action: Selector) {
         self.init(frame: NSRect(origin: .zero, size: Self.size))
@@ -2488,15 +2501,37 @@ final class CodeCopyButton: NSButton {
         self.action = action
         isBordered = false
         imagePosition = .imageOnly
-        wantsLayer = true
-        layer?.cornerRadius = 5
-        // Opaque-ish backing so the glyph stays legible if a long code line runs under it.
-        layer?.backgroundColor = NSColor.controlBackgroundColor.withAlphaComponent(0.92).cgColor
-        layer?.borderWidth = 0.5
-        layer?.borderColor = NSColor.separatorColor.cgColor
+        addTrackingArea(NSTrackingArea(
+            rect: .zero,
+            options: [.mouseEnteredAndExited, .activeInActiveApp, .inVisibleRect],
+            owner: self,
+            userInfo: nil
+        ))
         toolTip = "Copy code"
         setAccessibilityLabel("Copy code")
         showCopyState()
+    }
+
+    override func draw(_ dirtyRect: NSRect) {
+        (isPointerInside ? cardStyle.border : cardStyle.fill).setFill()
+        NSBezierPath(roundedRect: bounds, xRadius: Self.cornerRadius, yRadius: Self.cornerRadius).fill()
+        super.draw(dirtyRect)
+    }
+
+    override func mouseEntered(with event: NSEvent) {
+        super.mouseEntered(with: event)
+        isPointerInside = true
+    }
+
+    override func mouseExited(with event: NSEvent) {
+        super.mouseExited(with: event)
+        isPointerInside = false
+    }
+
+    /// Hiding the button under the pointer sends no mouseExited.
+    override func viewDidHide() {
+        super.viewDidHide()
+        isPointerInside = false
     }
 
     func showCopyState() {
@@ -2512,12 +2547,5 @@ final class CodeCopyButton: NSButton {
     /// The text view underneath sets an I-beam; a button should read as clickable.
     override func resetCursorRects() {
         addCursorRect(bounds, cursor: .pointingHand)
-    }
-
-    override func viewDidChangeEffectiveAppearance() {
-        super.viewDidChangeEffectiveAppearance()
-        // CGColors don't track appearance; re-resolve on a light/dark flip.
-        layer?.backgroundColor = NSColor.controlBackgroundColor.withAlphaComponent(0.92).cgColor
-        layer?.borderColor = NSColor.separatorColor.cgColor
     }
 }
