@@ -751,6 +751,60 @@ nonisolated final class PreviewBehaviorTests: XCTestCase {
         waitUntil("the block returns", in: harness) { harness.textView?.string.contains(FrontmatterFold.collapsedMarker) == true }
     }
 
+    @MainActor
+    func testTheTabBarHidesForALoneDocumentOnlyWhenTheSettingIsOn() throws {
+        let restore = preserveDocumentState()
+        let settings = SettingsManager.shared
+        let previous = settings.hidesTabBarForSingleDocument
+        defer {
+            settings.hidesTabBarForSingleDocument = previous
+            restore()
+        }
+        let manager = DocumentManager.shared
+        let one = MarkdownDocument(url: URL(fileURLWithPath: "/tmp/hashlight-tab-one.md"), content: "# One\n")
+        let two = MarkdownDocument(url: URL(fileURLWithPath: "/tmp/hashlight-tab-two.md"), content: "# Two\n")
+        manager.openDocuments = [one]
+        manager.selectedDocumentId = one.id
+
+        let hosting = NSHostingView(rootView: NormalContentView(selectedHeadingId: .constant(nil))
+            .environmentObject(manager)
+            .environmentObject(settings))
+        let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 900, height: 600),
+                              styleMask: .borderless, backing: .buffered, defer: true)
+        window.contentView = hosting
+        // The strip is the only horizontal scroll view in the column; the preview's is vertical.
+        // SwiftUI removes a view's AppKit host a run-loop turn after the condition flips.
+        func tabBarIsShown() -> Bool {
+            hosting.layoutSubtreeIfNeeded()
+            let deadline = Date().addingTimeInterval(0.6)
+            while Date() < deadline { RunLoop.main.run(until: Date().addingTimeInterval(0.05)) }
+            hosting.layoutSubtreeIfNeeded()
+            return Self.horizontalScrollViews(in: hosting).contains { $0.frame.height < 60 && $0.frame.width > 100 }
+        }
+
+        settings.hidesTabBarForSingleDocument = false
+        XCTAssertTrue(tabBarIsShown(), "default: the bar stays for one document")
+
+        settings.hidesTabBarForSingleDocument = true
+        XCTAssertFalse(tabBarIsShown(), "setting on: the bar hides for one document")
+
+        manager.openDocuments = [one, two]
+        XCTAssertTrue(tabBarIsShown(), "a second document brings it back")
+
+        manager.openDocuments = [one]
+        XCTAssertFalse(tabBarIsShown(), "and closing it hides the bar again")
+    }
+
+    @MainActor
+    private static func horizontalScrollViews(in view: NSView) -> [NSScrollView] {
+        var found: [NSScrollView] = []
+        if let scrollView = view as? NSScrollView, scrollView.hasHorizontalScroller, !scrollView.hasVerticalScroller {
+            found.append(scrollView)
+        }
+        for subview in view.subviews { found += horizontalScrollViews(in: subview) }
+        return found
+    }
+
     func testYAMLScalarsLoseMatchingQuotesOnly() {
         XCTAssertEqual(MarkdownTextView.unquotedYAMLScalar("\"Rendering check\""), "Rendering check")
         XCTAssertEqual(MarkdownTextView.unquotedYAMLScalar("'single'"), "single")

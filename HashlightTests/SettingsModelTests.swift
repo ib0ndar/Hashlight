@@ -139,6 +139,24 @@ nonisolated final class FrontmatterSettingTests: XCTestCase {
     }
 }
 
+nonisolated final class TabBarSettingTests: XCTestCase {
+    @MainActor
+    func testTheTabBarStaysForASingleDocumentUnlessAsked() {
+        XCTAssertEqual(DefaultsKeys.hidesTabBarForSingleDocument, "hidesTabBarForSingleDocument")
+        let scratch = ScratchDefaults()
+        XCTAssertFalse(scratch.defaults.bool(forKey: DefaultsKeys.hidesTabBarForSingleDocument), "off by default")
+
+        let settings = SettingsManager.shared
+        let previous = settings.hidesTabBarForSingleDocument
+        defer { settings.hidesTabBarForSingleDocument = previous }
+
+        settings.hidesTabBarForSingleDocument = true
+        XCTAssertEqual(UserDefaults.standard.object(forKey: DefaultsKeys.hidesTabBarForSingleDocument) as? Bool, true)
+        settings.hidesTabBarForSingleDocument = false
+        XCTAssertEqual(UserDefaults.standard.object(forKey: DefaultsKeys.hidesTabBarForSingleDocument) as? Bool, false)
+    }
+}
+
 nonisolated final class SettingsPaneTests: XCTestCase {
     @MainActor
     func testThePaneKeyAndValuesAreStable() {

@@ -133,6 +133,7 @@ enum DefaultsKeys {
     static let contentWidth = "contentWidth"
     static let pageMargin = "pageMargin"
     static let showsFrontmatter = "showsFrontmatter"
+    static let hidesTabBarForSingleDocument = "hidesTabBarForSingleDocument"
     static let tableColumnConfiguration = MarkdownTableColumnPreferences.appKey
     static let zoomLevel = "zoomLevel"
 
@@ -222,6 +223,14 @@ class SettingsManager: ObservableObject {
     @Published var showsFrontmatter: Bool {
         didSet {
             UserDefaults.standard.set(showsFrontmatter, forKey: DefaultsKeys.showsFrontmatter)
+        }
+    }
+
+    /// Whether the tab strip is hidden while only one document is open. Off by default: the
+    /// strip stays, so the close button and the document's name are always in the same place.
+    @Published var hidesTabBarForSingleDocument: Bool {
+        didSet {
+            UserDefaults.standard.set(hidesTabBarForSingleDocument, forKey: DefaultsKeys.hidesTabBarForSingleDocument)
         }
     }
 
@@ -436,6 +445,7 @@ class SettingsManager: ObservableObject {
         self.pageMargin = PageMargin(rawValue: savedPageMargin) ?? .normal
 
         self.showsFrontmatter = Self.loadShowsFrontmatter(from: .standard)
+        self.hidesTabBarForSingleDocument = UserDefaults.standard.bool(forKey: DefaultsKeys.hidesTabBarForSingleDocument)
 
         let savedDockIconMode = UserDefaults.standard.string(forKey: DefaultsKeys.dockIconMode) ?? DockIconMode.system.rawValue
         self.dockIconMode = DockIconMode(rawValue: savedDockIconMode) ?? .system

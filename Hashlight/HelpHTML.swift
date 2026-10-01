@@ -89,6 +89,8 @@ enum HelpHTML {
             <li><strong>Ember</strong> - Always the dark icon</li>
         </ul>
         <p>The choice changes the icon in the Dock, the app switcher, the welcome screen, and Hashlight → About Hashlight while Hashlight runs. Finder keeps the standard icon.</p>
+        <h3>Tabs (General)</h3>
+        <p><strong>Hide the tab bar when only one document is open</strong> removes the tab strip for a lone document; it returns when a second one opens. Off by default. <kbd>⌘W</kbd> still closes the document either way.</p>
         <h3>Theme (Viewing)</h3>
         <p>Use the <strong>Light mode</strong> and <strong>Dark mode</strong> menus to choose a
         separate theme for each appearance. <strong>System</strong>, the default, uses macOS's own colors: the

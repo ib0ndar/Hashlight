@@ -66,7 +66,7 @@ Open .md --> Rendered preview (reloads when the file changes) --> Export PDF/HTM
 
 ### Navigation & Search
 - **Window** — a resizable, collapsible sidebar and a toolbar with Open, Focus Mode, Export, and Find (Liquid Glass on macOS 26; a standard toolbar on macOS 13–15)
-- **Multi-tab interface** — drag to reorder, right-click for tab options
+- **Multi-tab interface** — drag to reorder, right-click for tab options; Settings → General can hide the tab bar while only one document is open
 - **Sidebar navigator** — one sidebar that switches between **Files** (`⌘⌥1`) and **Outline** (`⌘⌥2`); show or hide it with `⌃⌘S`
 - **Files** — open a directory and browse all markdown files with FSEvents watching
 - **Outline** — hierarchical heading navigation with click-to-scroll

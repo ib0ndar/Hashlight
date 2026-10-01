@@ -7,6 +7,13 @@ struct NormalContentView: View {
     @EnvironmentObject private var settings: SettingsManager
     @Binding var selectedHeadingId: String?
 
+    /// The tab strip is shown outside focus mode, unless the setting hides it for a lone
+    /// document; it comes back as soon as a second one opens.
+    private var showsTabBar: Bool {
+        guard !documentManager.isFocusModeActive else { return false }
+        return !(settings.hidesTabBarForSingleDocument && documentManager.openDocuments.count == 1)
+    }
+
     var body: some View {
         if let document = documentManager.selectedDocument {
             documentColumn(document)
@@ -19,7 +26,7 @@ struct NormalContentView: View {
     private func documentColumn(_ document: MarkdownDocument) -> some View {
         let isFocusMode = documentManager.isFocusModeActive
         return VStack(spacing: 0) {
-            if !isFocusMode {
+            if showsTabBar {
                 TabBar()
                     .transition(Motion.slideOrFade(edge: .top))
             }
@@ -34,6 +41,7 @@ struct NormalContentView: View {
             }
         }
         .modifier(StatusBarPlacement(isShown: !isFocusMode, documentManager: documentManager, settings: settings))
+        .animation(Motion.standard, value: showsTabBar)
         // Focus mode shows no title or proxy icon: SwiftUI owns them and re-asserts the
         // window's title visibility, so they are cleared here rather than through NSWindow.
         .navigationTitle(isFocusMode ? "" : document.name)

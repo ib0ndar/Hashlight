@@ -12,7 +12,7 @@ enum SettingsPane: String, CaseIterable {
     /// size of the current pane).
     var height: CGFloat {
         switch self {
-        case .general: return 200
+        case .general: return 320
         case .viewing: return 690
         case .tables: return 360
         }
@@ -132,6 +132,14 @@ struct GeneralSettingsPane: View {
                 .pickerStyle(.segmented)
             } footer: {
                 Text(dockIconFootnote)
+            }
+
+            Section {
+                Toggle("Hide the tab bar when only one document is open", isOn: $settings.hidesTabBarForSingleDocument)
+            } header: {
+                Text("Tabs")
+            } footer: {
+                Text("The tab bar returns when a second document opens. Close Tab (⌘W) still closes the document.")
             }
         }
         .formStyle(.grouped)
