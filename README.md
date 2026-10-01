@@ -11,7 +11,7 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/version-1.1.0-f5a524?style=flat-square" alt="Version 1.1.0" />
+  <img src="https://img.shields.io/badge/version-1.2.0-f5a524?style=flat-square" alt="Version 1.2.0" />
   <img src="https://img.shields.io/badge/platform-macOS_13%2B-4a9eff?style=flat-square" alt="macOS 13+" />
   <img src="https://img.shields.io/badge/stack-SwiftUI%20%7C%20AppKit%20%7C%20NSTextView-34d399?style=flat-square" alt="Stack" />
   <a href="https://github.com/ib0ndar/Hashlight/actions/workflows/ci.yml"><img src="https://github.com/ib0ndar/Hashlight/actions/workflows/ci.yml/badge.svg?branch=main" alt="CI" /></a>
@@ -32,9 +32,10 @@ Electron, no Tauri.
 
 Hashlight grew out of [zMD](https://github.com/umzcio/zMD) by Zachary Rossmiller, a Markdown
 editor. It took only zMD's reading side — the renderer, the navigation, and the exports — and left
-the editor and the updater behind. That foundation has since been reworked heavily: a new window
+the editor and zMD's updater behind. That foundation has since been reworked heavily: a new window
 built around a navigator sidebar and a Liquid Glass toolbar, three Settings panes, System themes
-drawn from macOS's own colors, rounded code and table cards, a folding frontmatter card, and more.
+drawn from macOS's own colors, rounded code and table cards, a folding frontmatter card, its own
+verified in-app updates, and more.
 Hashlight shares nothing with zMD at run time; the two can be installed side by side (see
 [Next to zMD](#next-to-zmd)).
 
@@ -106,8 +107,13 @@ Open .md --> Rendered document (reloads when the file changes) --> Export PDF/HT
 - **Fonts** — independently select an installed proportional font for Markdown text and a monospaced font for code and commands, each with its own size (8–32 pt; Reset returns to 16 and 13 pt)
 - **Adaptive icon** — a Liquid Glass `#` lit by an amber spark; on macOS 26 it follows the system's icon style (Frost by default, Ember in dark, plus Clear and Tinted)
 - **Dock icon** — keep the system's choice or always show Frost or Ember in the Dock and app switcher (Settings → General)
-- **Settings** — three panes: **General** (appearance, Dock icon, tabs), **Viewing** (themes, fonts, layout, frontmatter), and **Tables** (column sizing by header category, off by default); Settings reopens on the pane you used last
+- **Settings** — three panes: **General** (appearance, Dock icon, tabs, updates), **Viewing** (themes, fonts, layout, frontmatter), and **Tables** (column sizing by header category, off by default); Settings reopens on the pane you used last
 - **About** — Hashlight → About Hashlight shows the version, the icon the Dock shows, and credits zMD
+
+### Updates
+- **Check for Updates** — Hashlight → Check for Updates… (or Settings → General → Check Now) looks for a new release on GitHub and shows what is new in every version you don't have yet
+- **Daily check** — on by default: once a day Hashlight asks GitHub for its list of releases (nothing else is sent) and speaks up only when there is a new version; Skip This Version silences a version until a newer one appears
+- **Verified, in place** — Update Now checks the download's Ed25519 signature and SHA-256 checksum and the app inside it, replaces Hashlight, and reopens it with the documents you had open
 
 ---
 
@@ -123,6 +129,7 @@ Open .md --> Rendered document (reloads when the file changes) --> Export PDF/HT
 | **File watching** | `DispatchSourceFileSystemObject` + `FSEventStream` for directories |
 | **Persistence** | `UserDefaults` + security-scoped bookmark data |
 | **Distribution** | An ad-hoc signed, universal `.dmg` on [GitHub Releases](https://github.com/ib0ndar/Hashlight/releases) (not notarized), or build from source; the main app is not sandboxed |
+| **Updates** | Built in: GitHub's releases API, `URLSession`, CryptoKit (Ed25519, SHA-256), `hdiutil` — no updater framework |
 | **Deployment target** | macOS 13.0+ |
 
 ---
@@ -133,8 +140,7 @@ Open .md --> Rendered document (reloads when the file changes) --> Export PDF/HT
 
 Download the `.dmg` from the [latest release](https://github.com/ib0ndar/Hashlight/releases/latest),
 open it, and drag Hashlight to Applications. It runs on macOS 13 or later, on Apple silicon and
-Intel Macs. Hashlight has no updater: new versions appear on the
-[Releases](https://github.com/ib0ndar/Hashlight/releases) page.
+Intel Macs.
 
 The app is ad-hoc signed and not notarized (it has no Apple Developer ID), so macOS blocks its
 first launch:
@@ -145,6 +151,11 @@ first launch:
 
 From then on Hashlight opens normally. On macOS 13 and 14 you can instead Control-click Hashlight
 in Applications and choose **Open**.
+
+After that, Hashlight keeps itself up to date: it checks GitHub once a day, and Hashlight → Check
+for Updates… checks at once. Update Now verifies the download and replaces the app in its folder,
+so keep Hashlight in Applications (or another folder you can change) rather than running it from
+the disk image.
 
 ### Build from Source
 
@@ -173,6 +184,11 @@ Produces `build/Hashlight.dmg` with the drag-to-Applications installer layout: a
 (Apple silicon and Intel) app built from a clean Release product. The image is ad-hoc signed and
 not notarized, so its first launch goes through **Open Anyway** as described under
 [Install](#install).
+
+The script also writes `build/Hashlight.dmg.sig`, the image's Ed25519 signature for the in-app
+updater, with the release key kept in the maintainer's login Keychain
+(`scripts/update-signing.sh`). Without that key, build with `HASHLIGHT_UNSIGNED_DMG=1`; installed
+copies refuse to update to an image that has no valid signature.
 
 ### Next to zMD
 

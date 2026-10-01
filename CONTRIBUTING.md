@@ -31,7 +31,8 @@ copies before and after the build. Do not create per-run `/tmp/...-derived` dire
 `./scripts/manage-dev-registrations.sh unregister`.
 
 There are no external dependencies — no SwiftPM packages, no CocoaPods. The
-only web content is Mermaid/KaTeX, loaded in a hidden WKWebView.
+only web content is Mermaid/KaTeX, loaded in a hidden WKWebView. The in-app
+updater is Hashlight's own code (GitHub's releases API, CryptoKit, `hdiutil`).
 
 A clean build produces **zero warnings**. Please keep it that way.
 
@@ -49,6 +50,10 @@ The main pieces, all in `Hashlight/`:
   DOCX, print) route through it.
 - `MarkdownTextView.swift` — the NSTextView-based preview renderer.
 - `ExportManager.swift` — PDF/HTML/RTF/DOCX export.
+- `SoftwareUpdate*.swift` — the in-app updater: reading GitHub releases and
+  verifying downloads (`SoftwareUpdate`), installing and relaunching
+  (`SoftwareUpdateInstaller`), scheduling and the update window
+  (`SoftwareUpdateController`).
 
 ### Adding new markdown syntax
 
@@ -108,6 +113,17 @@ notarized. Build the DMG with `./scripts/build-dmg.sh`; it builds a universal ap
 Release product (and stops if the app holds anything but the Quick Look extension or misses an
 architecture), lays out the disk image with `dmgbuild`, installed on demand into
 `build/dmg-venv`, and never scripts Finder.
+
+The in-app updater reads the repository's GitHub releases (drafts and pre-releases are ignored)
+and installs only what it can verify, so a release must follow this contract:
+
+- the tag is `vX.Y.Z`, and the app inside is version `X.Y.Z`;
+- the assets include `Hashlight-X.Y.Z.dmg` and its signature `Hashlight-X.Y.Z.dmg.sig`, which
+  `build-dmg.sh` writes as `build/Hashlight.dmg.sig` with the maintainer's Ed25519 key
+  (`scripts/update-signing.sh`; the matching public key is the `HASHLIGHT_UPDATE_PUBLIC_KEY`
+  build setting);
+- the update window shows the release notes up to a heading that starts with "Install" or the line
+  `<!-- end of update notes -->`, so put installation steps after either.
 
 ## License
 

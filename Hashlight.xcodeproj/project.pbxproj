@@ -69,6 +69,10 @@
 		710000000000000000000004 /* PreviewThemeTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 710000000000000000000003 /* PreviewThemeTests.swift */; };
 		710000000000000000000006 /* PreviewFont.swift in Sources */ = {isa = PBXBuildFile; fileRef = 710000000000000000000005 /* PreviewFont.swift */; };
 		710000000000000000000008 /* PreviewFontTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 710000000000000000000007 /* PreviewFontTests.swift */; };
+		770000000000000000000002 /* SoftwareUpdate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 770000000000000000000001 /* SoftwareUpdate.swift */; };
+		770000000000000000000004 /* SoftwareUpdateInstaller.swift in Sources */ = {isa = PBXBuildFile; fileRef = 770000000000000000000003 /* SoftwareUpdateInstaller.swift */; };
+		770000000000000000000006 /* SoftwareUpdateController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 770000000000000000000005 /* SoftwareUpdateController.swift */; };
+		770000000000000000000008 /* SoftwareUpdateTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 770000000000000000000007 /* SoftwareUpdateTests.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -103,6 +107,10 @@
 /* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
+		770000000000000000000001 /* SoftwareUpdate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SoftwareUpdate.swift; sourceTree = "<group>"; };
+		770000000000000000000003 /* SoftwareUpdateInstaller.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SoftwareUpdateInstaller.swift; sourceTree = "<group>"; };
+		770000000000000000000005 /* SoftwareUpdateController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SoftwareUpdateController.swift; sourceTree = "<group>"; };
+		770000000000000000000007 /* SoftwareUpdateTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SoftwareUpdateTests.swift; sourceTree = "<group>"; };
 		760000000000000000000003 /* PreviewPerformanceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PreviewPerformanceTests.swift; sourceTree = "<group>"; };
 		760000000000000000000001 /* PreviewImage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PreviewImage.swift; sourceTree = "<group>"; };
 		F60000000000000000000002 /* HelpHTML.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HelpHTML.swift; sourceTree = "<group>"; };
@@ -242,6 +250,9 @@
 				7300000000000000000000A3 /* DockIcon-Frost.icns */,
 				7300000000000000000000A5 /* DockIcon-Ember.icns */,
 				7300000000000000000000A1 /* DockIconController.swift */,
+				770000000000000000000001 /* SoftwareUpdate.swift */,
+				770000000000000000000003 /* SoftwareUpdateInstaller.swift */,
+				770000000000000000000005 /* SoftwareUpdateController.swift */,
 				7400000000000000000000A5 /* Credits.rtf */,
 				A1000000C /* Hashlight.entitlements */,
 
@@ -280,6 +291,7 @@ A1111111 /* Hashlight.app */,
 				7300000000000000000000A7 /* DockIconTests.swift */,
 				7400000000000000000000A7 /* SettingsModelTests.swift */,
 				760000000000000000000003 /* PreviewPerformanceTests.swift */,
+				770000000000000000000007 /* SoftwareUpdateTests.swift */,
 			);
 			path = HashlightTests;
 			sourceTree = "<group>";
@@ -464,6 +476,9 @@ A1111111 /* Hashlight.app */,
 				7400000000000000000000A2 /* NavigatorSidebar.swift in Sources */,
 				7400000000000000000000A4 /* ViewerToolbar.swift in Sources */,
 				7400000000000000000000AA /* StatusBarAccessory.swift in Sources */,
+				770000000000000000000002 /* SoftwareUpdate.swift in Sources */,
+				770000000000000000000004 /* SoftwareUpdateInstaller.swift in Sources */,
+				770000000000000000000006 /* SoftwareUpdateController.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -480,6 +495,7 @@ A1111111 /* Hashlight.app */,
 				7300000000000000000000A8 /* DockIconTests.swift in Sources */,
 				7400000000000000000000A8 /* SettingsModelTests.swift in Sources */,
 				760000000000000000000004 /* PreviewPerformanceTests.swift in Sources */,
+				770000000000000000000008 /* SoftwareUpdateTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -672,6 +688,8 @@ A1111111 /* Hashlight.app */,
 				SWIFT_VERSION = 6.0;
 				HASHLIGHT_DISPLAY_NAME = "Hashlight Debug";
 				HASHLIGHT_DOCUMENT_HANDLER_RANK = None;
+				HASHLIGHT_UPDATE_FEED_URL = "https://api.github.com/repos/ib0ndar/Hashlight/releases?per_page=20";
+				HASHLIGHT_UPDATE_PUBLIC_KEY = "QkZ/LcLlioHFYeGDp7GmFvnQ5xGec84tyXjHhEohflI=";
 			};
 			name = Debug;
 		};
@@ -710,6 +728,8 @@ A1111111 /* Hashlight.app */,
 				SWIFT_VERSION = 6.0;
 				HASHLIGHT_DISPLAY_NAME = Hashlight;
 				HASHLIGHT_DOCUMENT_HANDLER_RANK = Default;
+				HASHLIGHT_UPDATE_FEED_URL = "https://api.github.com/repos/ib0ndar/Hashlight/releases?per_page=20";
+				HASHLIGHT_UPDATE_PUBLIC_KEY = "QkZ/LcLlioHFYeGDp7GmFvnQ5xGec84tyXjHhEohflI=";
 			};
 			name = Release;
 		};

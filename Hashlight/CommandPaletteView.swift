@@ -50,6 +50,9 @@ class CommandRegistry {
                     documentManager.revealInFinder(document: doc)
                 }
             },
+            CommandAction(name: "Check for Updates", category: .file, shortcut: nil, icon: "arrow.down.circle", isEnabled: { true }) {
+                UpdateController.shared.checkForUpdates()
+            },
 
             // View
             CommandAction(name: "Toggle Focus Mode", category: .view, shortcut: "\u{2318}\u{21E7}F", icon: "arrow.up.left.and.arrow.down.right", isEnabled: { true }) {

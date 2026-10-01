@@ -157,6 +157,13 @@ enum DefaultsKeys {
     // MARK: SettingsView
     /// The Settings pane shown last; Settings reopens on it.
     static let settingsPane = "settingsPane"
+
+    // MARK: Updates (SettingsManager, UpdateController)
+    static let automaticallyChecksForUpdates = "automaticallyChecksForUpdates"
+    /// The date of the last successful update check.
+    static let lastUpdateCheck = "lastUpdateCheck"
+    /// The version the user chose Skip This Version for; automatic checks do not offer it.
+    static let skippedUpdateVersion = "skippedUpdateVersion"
 }
 
 class SettingsManager: ObservableObject {
@@ -276,6 +283,13 @@ class SettingsManager: ObservableObject {
     @Published var hidesTabBarForSingleDocument: Bool {
         didSet {
             UserDefaults.standard.set(hidesTabBarForSingleDocument, forKey: DefaultsKeys.hidesTabBarForSingleDocument)
+        }
+    }
+
+    /// Whether Hashlight checks GitHub for a new release once a day (`UpdateController`).
+    @Published var automaticallyChecksForUpdates: Bool {
+        didSet {
+            UserDefaults.standard.set(automaticallyChecksForUpdates, forKey: DefaultsKeys.automaticallyChecksForUpdates)
         }
     }
 
@@ -447,6 +461,11 @@ class SettingsManager: ObservableObject {
         defaults.object(forKey: DefaultsKeys.showsFrontmatter) as? Bool ?? true
     }
 
+    /// On unless it was turned off; the key is written only when the setting changes.
+    static func loadAutomaticallyChecksForUpdates(from defaults: UserDefaults) -> Bool {
+        defaults.object(forKey: DefaultsKeys.automaticallyChecksForUpdates) as? Bool ?? true
+    }
+
     static func loadNavigatorState(from defaults: UserDefaults) -> (mode: NavigatorMode, isVisible: Bool) {
         let savedMode = defaults.string(forKey: DefaultsKeys.navigatorMode).flatMap(NavigatorMode.init(rawValue:))
         let savedVisibility = defaults.object(forKey: DefaultsKeys.navigatorVisible) as? Bool
@@ -505,6 +524,7 @@ class SettingsManager: ObservableObject {
 
         self.showsFrontmatter = Self.loadShowsFrontmatter(from: .standard)
         self.hidesTabBarForSingleDocument = UserDefaults.standard.bool(forKey: DefaultsKeys.hidesTabBarForSingleDocument)
+        self.automaticallyChecksForUpdates = Self.loadAutomaticallyChecksForUpdates(from: .standard)
 
         let savedDockIconMode = UserDefaults.standard.string(forKey: DefaultsKeys.dockIconMode) ?? DockIconMode.system.rawValue
         self.dockIconMode = DockIconMode(rawValue: savedDockIconMode) ?? .system

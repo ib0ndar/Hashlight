@@ -10,10 +10,20 @@ set -euo pipefail
 # settings to the user's existing window.
 #
 # The image is ad-hoc signed and not notarized. NOTARIZE is accepted for compatibility and ignored.
+#
+# The finished image is signed for the in-app updater with the Ed25519 key in the login Keychain
+# (scripts/update-signing.sh) into build/Hashlight.dmg.sig, and the signature is checked against
+# the public key built into the app. Set HASHLIGHT_UNSIGNED_DMG=1 to skip that for a test image;
+# installed copies cannot update to an image without its .sig.
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 PROJECT_DIR="$(dirname "$SCRIPT_DIR")"
 REGISTRATION_MANAGER="$SCRIPT_DIR/manage-dev-registrations.sh"
+UPDATE_SIGNING="$SCRIPT_DIR/update-signing.sh"
+SIGN_DMG=1
+if [ "${HASHLIGHT_UNSIGNED_DMG:-0}" = "1" ]; then
+    SIGN_DMG=0
+fi
 BUILD_DIR="$PROJECT_DIR/build"
 RELEASE_PRODUCTS_DIR="$PROJECT_DIR/build/Xcode/Release"
 DMG_PATH="$BUILD_DIR/Hashlight.dmg"
@@ -36,6 +46,11 @@ cleanup_on_exit() {
     exit "$command_status"
 }
 trap cleanup_on_exit EXIT
+
+if [ "$SIGN_DMG" = "1" ]; then
+    # Fail before the long build rather than after it.
+    "$UPDATE_SIGNING" check
+fi
 
 echo "==> Building Release (ad-hoc signed)..."
 cd "$PROJECT_DIR"
@@ -211,12 +226,20 @@ if ! "$VENV_DIR/bin/python" -m pip freeze --disable-pip-version-check 2>/dev/nul
 fi
 
 echo "==> Creating DMG..."
-rm -f "$DMG_PATH"
+rm -f "$DMG_PATH" "$DMG_PATH.sig"
 "$VENV_DIR/bin/dmgbuild" -s "$SCRIPT_DIR/dmg-settings.py" \
     -D app="$RELEASE_PRODUCTS_DIR/$APP_NAME" \
     -D background="$BUILD_DIR/dmg-background/background.png" \
     -D window_width="$WIN_W" -D window_height="$WIN_H" \
     "$VOLUME_NAME" "$DMG_PATH"
+
+if [ "$SIGN_DMG" = "1" ]; then
+    echo "==> Signing the DMG for the in-app updater..."
+    "$UPDATE_SIGNING" sign "$DMG_PATH"
+    "$UPDATE_SIGNING" verify "$DMG_PATH" "$RELEASE_PRODUCTS_DIR/$APP_NAME"
+else
+    echo "==> HASHLIGHT_UNSIGNED_DMG=1: no update signature (installed copies cannot update to this image)"
+fi
 
 echo "==> Done! DMG at: $DMG_PATH"
 echo "    Size: $(du -h "$DMG_PATH" | cut -f1)"

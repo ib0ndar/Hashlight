@@ -57,6 +57,8 @@ struct HashlightApp: App {
                     }
                     // Restore last-opened folder
                     folderManager.restoreFolder()
+                    // After an update relaunched the app: the documents that were open.
+                    UpdateController.shared.restoreAfterUpdate()
                 }
                 .sheet(isPresented: $showingHelp) {
                     HelpView()
@@ -67,6 +69,10 @@ struct HashlightApp: App {
             CommandGroup(replacing: .appInfo) {
                 Button("About Hashlight") {
                     AboutPanel.show()
+                }
+
+                Button("Check for Updates…") {
+                    UpdateController.shared.checkForUpdates()
                 }
             }
 
@@ -344,6 +350,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         // change, unlike clearing SwiftUI's preferredColorScheme on a Settings scene.
         ApplicationAppearance.apply(SettingsManager.shared.colorScheme, to: NSApplication.shared)
         DockIconController.shared.start(observing: SettingsManager.shared)
+        UpdateController.shared.start()
     }
 
     /// Files opened through AppKit's handler, until the main window has first appeared.

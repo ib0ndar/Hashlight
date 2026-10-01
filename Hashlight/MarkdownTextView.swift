@@ -39,9 +39,11 @@ struct MarkdownTextView: NSViewRepresentable {
     let pageMargin: SettingsManager.PageMargin
     /// Header-category column sizing; nil (column weighting off) sizes columns to their content.
     let tableColumnConfiguration: MarkdownTableColumnConfiguration?
+    /// Space above and below the text (the update window's release notes use less).
+    let verticalInset: CGFloat
     private var imageResources: PreviewImageResources?
 
-    init(content: String, baseURL: URL?, directoryBookmark: Data? = nil, documentId: UUID, scrollToHeadingId: Binding<String?>, searchText: String, currentMatchIndex: Int, mainFontID: String, fixedFontID: String, mainFontSize: CGFloat = CGFloat(PreviewFontCatalog.defaultMainSize), fixedFontSize: CGFloat = CGFloat(PreviewFontCatalog.defaultFixedSize), theme: PreviewTheme, zoomLevel: CGFloat = 1.0, initialScrollPosition: CGFloat = 0, onScrollPositionChanged: ((CGFloat) -> Void)? = nil, onMatchCountChanged: ((Int) -> Void)? = nil, contentAlignment: SettingsManager.ContentAlignment = .left, contentWidth: SettingsManager.ContentWidth = .medium, pageMargin: SettingsManager.PageMargin = .normal, tableColumnConfiguration: MarkdownTableColumnConfiguration? = nil, showsFrontmatter: Bool = true) {
+    init(content: String, baseURL: URL?, directoryBookmark: Data? = nil, documentId: UUID, scrollToHeadingId: Binding<String?>, searchText: String, currentMatchIndex: Int, mainFontID: String, fixedFontID: String, mainFontSize: CGFloat = CGFloat(PreviewFontCatalog.defaultMainSize), fixedFontSize: CGFloat = CGFloat(PreviewFontCatalog.defaultFixedSize), theme: PreviewTheme, zoomLevel: CGFloat = 1.0, initialScrollPosition: CGFloat = 0, onScrollPositionChanged: ((CGFloat) -> Void)? = nil, onMatchCountChanged: ((Int) -> Void)? = nil, contentAlignment: SettingsManager.ContentAlignment = .left, contentWidth: SettingsManager.ContentWidth = .medium, pageMargin: SettingsManager.PageMargin = .normal, tableColumnConfiguration: MarkdownTableColumnConfiguration? = nil, showsFrontmatter: Bool = true, verticalInset: CGFloat = 40) {
         self.content = content
         self.baseURL = baseURL
         self.directoryBookmark = directoryBookmark
@@ -63,6 +65,7 @@ struct MarkdownTextView: NSViewRepresentable {
         self.pageMargin = pageMargin
         self.tableColumnConfiguration = tableColumnConfiguration
         self.showsFrontmatter = showsFrontmatter
+        self.verticalInset = verticalInset
     }
 
     /// Everything besides content + zoom that changes what gets built.
@@ -102,7 +105,7 @@ struct MarkdownTextView: NSViewRepresentable {
         scrollView.appearance = theme.appearance
         scrollView.backgroundColor = theme.backgroundColor
         scrollView.drawsBackground = true
-        textView.textContainerInset = NSSize(width: pageMargin.points, height: 40)
+        textView.textContainerInset = NSSize(width: pageMargin.points, height: verticalInset)
         textView.isRichText = true
         textView.allowsUndo = false
 
@@ -163,7 +166,7 @@ struct MarkdownTextView: NSViewRepresentable {
         scrollView.appearance = theme.appearance
         scrollView.backgroundColor = theme.backgroundColor
 
-        let desiredInsets = NSSize(width: pageMargin.points, height: 40)
+        let desiredInsets = NSSize(width: pageMargin.points, height: verticalInset)
         if textView.textContainerInset != desiredInsets {
             if let preview = textView as? PreviewTextView {
                 preview.setTextContainerInsetKeepingReadingPosition(desiredInsets)

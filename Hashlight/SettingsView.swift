@@ -12,7 +12,7 @@ enum SettingsPane: String, CaseIterable {
     /// size of the current pane).
     var height: CGFloat {
         switch self {
-        case .general: return 320
+        case .general: return 500
         case .viewing: return 690
         case .tables: return 440
         }
@@ -94,6 +94,7 @@ private final class EscapeKeyHandlingView: NSView {
 
 struct GeneralSettingsPane: View {
     @ObservedObject var settings: SettingsManager
+    @ObservedObject private var updates = UpdateController.shared
 
     private var appAppearance: Binding<ColorScheme?> {
         Binding(
@@ -140,6 +141,30 @@ struct GeneralSettingsPane: View {
                 Text("Tabs")
             } footer: {
                 Text("The tab bar returns when a second document opens. Close Tab (⌘W) still closes the document.")
+            }
+
+            Section {
+                Toggle("Automatically check for updates", isOn: $settings.automaticallyChecksForUpdates)
+                    .onChange(of: settings.automaticallyChecksForUpdates) { isOn in
+                        if isOn { updates.checkAutomaticallyIfDue() }
+                    }
+                HStack(spacing: 8) {
+                    Text(updates.statusText)
+                        .foregroundStyle(.secondary)
+                    Spacer()
+                    if updates.isChecking {
+                        ProgressView()
+                            .controlSize(.small)
+                    }
+                    Button("Check Now") {
+                        updates.checkForUpdates()
+                    }
+                    .disabled(updates.isChecking)
+                }
+            } header: {
+                Text("Updates")
+            } footer: {
+                Text("Once a day, Hashlight asks GitHub whether a newer version has been released; nothing else is sent. An update is verified before it is installed.")
             }
         }
         .formStyle(.grouped)

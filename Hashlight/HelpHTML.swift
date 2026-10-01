@@ -75,7 +75,7 @@ enum HelpHTML {
         <p>When another app saves an open file, its tab reloads automatically and keeps your reading position. If the file is deleted, Hashlight asks before closing the tab. <kbd>⌘R</kbd> reloads the current tab by hand.</p>
 
         <h2>Customizing Appearance</h2>
-        <p>Press <kbd>⌘,</kbd> to open Settings. It has three panes: <strong>General</strong> (appearance and Dock icon), <strong>Preview</strong> (themes, fonts, and layout), and <strong>Tables</strong> (column categories). Settings reopens on the pane you used last.</p>
+        <p>Press <kbd>⌘,</kbd> to open Settings. It has three panes: <strong>General</strong> (appearance, Dock icon, tabs, and updates), <strong>Viewing</strong> (themes, fonts, and layout), and <strong>Tables</strong> (column categories). Settings reopens on the pane you used last.</p>
         <h3>Application Appearance (General)</h3>
         <ul>
             <li><strong>System</strong> - Follows macOS appearance</li>
@@ -117,6 +117,16 @@ enum HelpHTML {
             <li><strong>Word (.rtf)</strong> - Rich text for older word processors</li>
         </ul>
         <p>Press <kbd>⌘P</kbd> to print.</p>
+
+        <h2>Updates</h2>
+        <p>Choose <strong>Hashlight → Check for Updates…</strong>, or <strong>Check Now</strong> in Settings → General, to look for a new version on GitHub. If there is one, a window shows what is new in every version you don't have yet, with three choices:</p>
+        <ul>
+            <li><strong>Update Now</strong> - Downloads the update, verifies it, replaces Hashlight, and reopens it with the documents you had open</li>
+            <li><strong>Remind Me Tomorrow</strong> - Closes the window; tomorrow's check offers the update again</li>
+            <li><strong>Skip This Version</strong> - Automatic checks no longer offer this version, only a newer one; Check for Updates still shows it</li>
+        </ul>
+        <p>With <strong>Automatically check for updates</strong> on (Settings → General, on by default), Hashlight checks once a day, the first time it runs that day or when it stays open into a new day. It says nothing unless there is a new version, and Settings shows when it last checked. The check only asks GitHub for the list of releases; nothing else is sent.</p>
+        <p>Before installing, Hashlight checks the download's signature and checksum and that it contains Hashlight at the new version. To update, Hashlight must be in a folder you can change, such as Applications; run from its disk image, it offers the release page instead.</p>
 
         <h2>Keyboard Shortcuts</h2>
         <table>
