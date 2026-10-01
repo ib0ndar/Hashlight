@@ -111,6 +111,7 @@ nonisolated enum InlineMarkdown {
     }
 
     private static func lineBreakRange(in text: String, at index: String.Index) -> Range<String.Index>? {
+        guard text[index] == "<" else { return nil }
         let tail = text[index...]
         return tail.range(of: #"^<br\s*/?>"#, options: [.regularExpression, .caseInsensitive])
     }

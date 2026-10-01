@@ -25,12 +25,6 @@ class WebRenderer: NSObject {
         return cache
     }()
 
-    /// Estimated in-memory byte cost of a rendered image, so the cache's totalCostLimit is
-    /// actually enforced (setObject without a cost leaves the byte cap inert).
-    private static func imageCost(_ image: NSImage) -> Int {
-        let size = image.size
-        return max(1, Int(size.width) * Int(size.height) * 4)
-    }
     private var pendingMermaid: [(code: String, theme: PreviewTheme, completion: (NSImage?) -> Void)] = []
     private var pendingKatex: [(latex: String, displayMode: Bool, forceLightTheme: Bool, foregroundHex: String?, completion: (NSImage?) -> Void)] = []
 
@@ -226,7 +220,7 @@ class WebRenderer: NSObject {
 
         self.activeMermaidCompletion = { [weak self] image in
             if let image = image {
-                self?.imageCache.setObject(image, forKey: item.key as NSString, cost: Self.imageCost(image))
+                self?.imageCache.setObject(image, forKey: item.key as NSString, cost: PreviewImage.decodedByteCost(image))
             }
             item.completion(image)
             self?.isMermaidRendering = false
@@ -507,7 +501,7 @@ class WebRenderer: NSObject {
 
         self.activeKatexCompletion = { [weak self] image in
             if let image = image {
-                self?.imageCache.setObject(image, forKey: item.key as NSString, cost: Self.imageCost(image))
+                self?.imageCache.setObject(image, forKey: item.key as NSString, cost: PreviewImage.decodedByteCost(image))
             }
             item.completion(image)
             self?.isKatexRendering = false

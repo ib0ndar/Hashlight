@@ -105,7 +105,8 @@ enum Cache {
     // Math/Mermaid images are tiny (~5KB each). Long docs hit ~300+ inline math spans;
     // with countLimit=100 the cache thrashed, causing constant re-render loops that
     // visibly auto-scrolled the viewport. Bumped to a value that comfortably fits even
-    // long technical/research papers, byte-bounded by the 100MB cap below.
+    // long technical/research papers. Decoded-byte costs drive NSCache's advisory limit;
+    // live preview attachments can still own images after their cache entries are evicted.
     static let diagramCountLimit: Int = 2000
     static let diagramByteLimit: Int = 100 * 1024 * 1024
     /// Maximum number of per-document scroll-position entries kept in UserDefaults.

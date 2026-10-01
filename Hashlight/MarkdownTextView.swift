@@ -33,6 +33,7 @@ struct MarkdownTextView: NSViewRepresentable {
     /// Horizontal page inset. Applied as view layout so changing it does not rebuild Markdown.
     let pageMargin: SettingsManager.PageMargin
     let tableColumnConfiguration: MarkdownTableColumnConfiguration
+    private var imageResources: PreviewImageResources?
 
     init(content: String, baseURL: URL?, directoryBookmark: Data? = nil, documentId: UUID, scrollToHeadingId: Binding<String?>, searchText: String, currentMatchIndex: Int, mainFontID: String, fixedFontID: String, theme: PreviewTheme, zoomLevel: CGFloat = 1.0, initialScrollPosition: CGFloat = 0, onScrollPositionChanged: ((CGFloat) -> Void)? = nil, onMatchCountChanged: ((Int) -> Void)? = nil, contentAlignment: SettingsManager.ContentAlignment = .left, contentWidth: SettingsManager.ContentWidth = .medium, pageMargin: SettingsManager.PageMargin = .normal, tableColumnConfiguration: MarkdownTableColumnConfiguration = .defaults, showsFrontmatter: Bool = true) {
         self.content = content
@@ -267,6 +268,7 @@ struct MarkdownTextView: NSViewRepresentable {
         var documentId: UUID?
         var headingRanges: [String: NSRange] = [:]
         var lastContent: String?
+        private var renderedDocumentId: UUID?
         var lastSearchText: String?
         var lastZoomLevel: CGFloat = 1.0
         var lastStyleKey: String = ""
@@ -310,6 +312,7 @@ struct MarkdownTextView: NSViewRepresentable {
         // Element-level rendering cache for incremental updates
         var elementCache: [String: NSAttributedString] = [:]
         var lastZoomKey: String = ""
+        let imageResources = PreviewImageResources()
         /// Documents whose frontmatter block is open; the default is collapsed.
         var expandedFrontmatterDocuments: Set<UUID> = []
         /// The representable as of the last update, for rebuilds the view asks for itself.
@@ -376,8 +379,24 @@ struct MarkdownTextView: NSViewRepresentable {
             // Read at rebuild time, not when the reload was scheduled: the reader may have
             // scrolled during the debounce.
             let keptScrollY = keepScrollPosition ? scrollView.contentView.bounds.origin.y : nil
+            let selection = renderedDocumentId == parent.documentId ? textView.selectedRanges : []
             let (attributedString, headingRanges) = parent.buildAttributedString(coordinator: self)
-            textView.textStorage?.setAttributedString(attributedString)
+            if let storage = textView.textStorage {
+                // Replacing a populated attributed range inserts each new attribute run before
+                // removing the old runs. Clearing first avoids quadratic run-array movement.
+                storage.beginEditing()
+                storage.deleteCharacters(in: NSRange(location: 0, length: storage.length))
+                storage.append(attributedString)
+                storage.endEditing()
+                if !selection.isEmpty {
+                    textView.selectedRanges = selection.map { value in
+                        let range = value.rangeValue
+                        let location = min(range.location, storage.length)
+                        return NSValue(range: NSRange(location: location, length: min(range.length, storage.length - location)))
+                    }
+                }
+            }
+            renderedDocumentId = parent.documentId
             self.headingRanges = headingRanges
             self.lastContent = parent.content
             self.lastSearchText = parent.searchText
@@ -799,6 +818,9 @@ struct MarkdownTextView: NSViewRepresentable {
         // renderers bake resolved RGB into cached fragments, so the selected palette belongs in
         // the cache key even when the Markdown content itself did not change.
         let zoomKey = "\(zoomLevel)-\(styleKey)"
+        coordinator.imageResources.prepare(documentId: documentId, content: content, style: zoomKey)
+        var renderer = self
+        renderer.imageResources = coordinator.imageResources
         let cacheValid = coordinator.lastZoomKey == zoomKey
         if !cacheValid {
             coordinator.elementCache.removeAll()
@@ -830,7 +852,7 @@ struct MarkdownTextView: NSViewRepresentable {
             if !skipCache, cacheValid, let cached = coordinator.elementCache[element.id] {
                 result.append(cached)
             } else {
-                renderElement(element, to: result, frontmatterExpanded: frontmatterExpanded)
+                renderer.renderElement(element, to: result, frontmatterExpanded: frontmatterExpanded)
                 let endPos = result.length
                 if !skipCache, endPos > startPos {
                     let fragment = result.attributedSubstring(from: NSRange(location: startPos, length: endPos - startPos))
@@ -1415,9 +1437,8 @@ struct MarkdownTextView: NSViewRepresentable {
             } ?? 1.0
             let newSize = NSSize(width: image.size.width * scale, height: image.size.height * scale)
 
-            let displayImage = (image.copy() as? NSImage) ?? image
-            displayImage.size = newSize
-            attachment.image = displayImage
+            attachment.image = image
+            attachment.bounds = NSRect(origin: .zero, size: newSize)
 
             let imageString = NSAttributedString(attachment: attachment)
             result.append(NSAttributedString(string: "\n"))
@@ -1434,14 +1455,16 @@ struct MarkdownTextView: NSViewRepresentable {
     }
 
     private func loadImage(path: String) -> NSImage? {
-        // L3: cache key composed of (baseURL.path, path) so two open documents in different
-        // folders can each have an `image.png` without one's image overwriting the other's
-        // entry. Remote URLs are unique by URL alone, so we leave them keyed on `path`.
+        // Decode for a 2x display using the capped column width, stable across window resizes.
+        // Cache by resolution so wider presets never reuse an undersized thumbnail.
+        let pixelWidth = contentWidth.attachmentMaxWidth.map { Int(ceil($0 * 2)) }
+        // Local paths are relative to their document; remote URLs already identify a resource.
         let cacheKey: String = {
-            if path.hasPrefix("http://") || path.hasPrefix("https://") { return path }
-            return (baseURL?.deletingLastPathComponent().path ?? "") + "\u{1F}" + path
+            let location = path.hasPrefix("http://") || path.hasPrefix("https://")
+                ? path : (baseURL?.deletingLastPathComponent().path ?? "") + "\u{1F}" + path
+            return "image-\(pixelWidth ?? 0)\u{1F}" + location
         }()
-        if let cached = Coordinator.imageCache.object(forKey: cacheKey as NSString) {
+        if let cached = imageResources?.image(forKey: cacheKey, cache: Coordinator.imageCache) {
             return cached
         }
 
@@ -1460,12 +1483,14 @@ struct MarkdownTextView: NSViewRepresentable {
             // document this image load belongs to — a different pane's coordinator ignores it
             // (Plan 003).
             let docId = documentId
+            let resources = imageResources
+            let generation = resources?.generation ?? 0
             // URLSession instead of the old synchronous NSImage(contentsOf:) on a global queue —
             // that path had no timeout, so a hung server pinned a dispatch thread indefinitely.
-            Task {
+            Task { [weak resources] in
                 let image: NSImage?
                 if let (data, _) = try? await URLSession.shared.data(from: url) {
-                    image = NSImage(data: data)
+                    image = PreviewImage.load(data: data, maximumPixelWidth: pixelWidth)
                 } else {
                     image = nil
                 }
@@ -1477,7 +1502,8 @@ struct MarkdownTextView: NSViewRepresentable {
                     }
 
                     Coordinator.remoteImageFailures.remove(cacheKey)
-                    Coordinator.imageCache.setObject(image, forKey: cacheKey as NSString)
+                    Coordinator.imageCache.setObject(image, forKey: cacheKey as NSString, cost: PreviewImage.decodedByteCost(image))
+                    resources?.insert(image, forKey: cacheKey, generation: generation)
                     NotificationCenter.default.post(name: .diagramRendered, object: docId)
                 }
             }
@@ -1513,8 +1539,9 @@ struct MarkdownTextView: NSViewRepresentable {
             resolvedURL = nil
         }
 
-        if let url = resolvedURL, let image = NSImage(contentsOf: url) {
-            Coordinator.imageCache.setObject(image, forKey: cacheKey as NSString)
+        if let url = resolvedURL, let image = PreviewImage.load(contentsOf: url, maximumPixelWidth: pixelWidth) {
+            Coordinator.imageCache.setObject(image, forKey: cacheKey as NSString, cost: PreviewImage.decodedByteCost(image))
+            imageResources?.insert(image, forKey: cacheKey, generation: imageResources?.generation ?? 0)
             return image
         }
 
@@ -1525,18 +1552,15 @@ struct MarkdownTextView: NSViewRepresentable {
 
     private func appendMermaidBlock(code: String, to result: NSMutableAttributedString) {
         let cacheKey = "mermaid-\(theme.cacheKey)-" + code
-        if let cached = Coordinator.diagramCache.object(forKey: cacheKey as NSString) {
+        if let cached = imageResources?.image(forKey: cacheKey, cache: Coordinator.diagramCache) {
             // Embed cached image
             let attachment = NSTextAttachment()
             let scale = contentWidth.attachmentMaxWidth.map {
                 min(1.0, $0 / cached.size.width)
             } ?? 1.0
             let newSize = NSSize(width: cached.size.width * scale, height: cached.size.height * scale)
-            let resized = NSImage(size: newSize)
-            resized.lockFocus()
-            cached.draw(in: NSRect(origin: .zero, size: newSize))
-            resized.unlockFocus()
-            attachment.image = resized
+            attachment.image = cached
+            attachment.bounds = NSRect(origin: .zero, size: newSize)
             result.append(NSAttributedString(string: "\n"))
             result.append(NSAttributedString(attachment: attachment))
             result.append(NSAttributedString(string: "\n\n"))
@@ -1560,10 +1584,14 @@ struct MarkdownTextView: NSViewRepresentable {
             // Captured locally so the notification carries the document this diagram belongs
             // to — a different pane's coordinator ignores it (Plan 003).
             let docId = documentId
-            Task { @MainActor in
+            let theme = theme
+            let resources = imageResources
+            let generation = resources?.generation ?? 0
+            Task { @MainActor [weak resources] in
                 WebRenderer.shared.renderMermaid(code, theme: theme) { image in
                     guard let image = image else { return }
-                    Coordinator.diagramCache.setObject(image, forKey: cacheKey as NSString)
+                    Coordinator.diagramCache.setObject(image, forKey: cacheKey as NSString, cost: PreviewImage.decodedByteCost(image))
+                    resources?.insert(image, forKey: cacheKey, generation: generation)
                     NotificationCenter.default.post(name: .diagramRendered, object: docId)
                 }
             }
@@ -1572,7 +1600,7 @@ struct MarkdownTextView: NSViewRepresentable {
 
     private func appendDisplayMath(latex: String, to result: NSMutableAttributedString) {
         let cacheKey = "math-display-\(theme.cacheKey)-" + latex
-        if let cached = Coordinator.diagramCache.object(forKey: cacheKey as NSString) {
+        if let cached = imageResources?.image(forKey: cacheKey, cache: Coordinator.diagramCache) {
             let attachment = NSTextAttachment()
             attachment.image = cached
             result.append(NSAttributedString(string: "\n"))
@@ -1592,10 +1620,14 @@ struct MarkdownTextView: NSViewRepresentable {
             // Captured locally so the notification carries the document this math block
             // belongs to — a different pane's coordinator ignores it (Plan 003).
             let docId = documentId
-            Task { @MainActor in
-                WebRenderer.shared.renderMath(latex, displayMode: true, foregroundHex: theme.textHex) { image in
+            let foreground = theme.textHex
+            let resources = imageResources
+            let generation = resources?.generation ?? 0
+            Task { @MainActor [weak resources] in
+                WebRenderer.shared.renderMath(latex, displayMode: true, foregroundHex: foreground) { image in
                     guard let image = image else { return }
-                    Coordinator.diagramCache.setObject(image, forKey: cacheKey as NSString)
+                    Coordinator.diagramCache.setObject(image, forKey: cacheKey as NSString, cost: PreviewImage.decodedByteCost(image))
+                    resources?.insert(image, forKey: cacheKey, generation: generation)
                     NotificationCenter.default.post(name: .diagramRendered, object: docId)
                 }
             }
@@ -1807,7 +1839,7 @@ struct MarkdownTextView: NSViewRepresentable {
             // lose their textBlock binding and render as full-width rows outside the table.
             let existing = result.attributes(at: fullRange.location, effectiveRange: nil)
 
-            if let cached = Coordinator.diagramCache.object(forKey: cacheKey as NSString) {
+            if let cached = imageResources?.image(forKey: cacheKey, cache: Coordinator.diagramCache) {
                 // Replace with image attachment, sized to match the surrounding line height.
                 // takeSnapshot returns NSImages whose pixel dimensions are at the device scale
                 // (2x on retina), and NSTextAttachment displays at NSImage.size in points —
@@ -1835,10 +1867,14 @@ struct MarkdownTextView: NSViewRepresentable {
                 // Captured locally so the notification carries the document this inline math
                 // belongs to — a different pane's coordinator ignores it (Plan 003).
                 let docId = documentId
-                Task { @MainActor in
-                    WebRenderer.shared.renderMath(latex, displayMode: false, foregroundHex: theme.textHex) { image in
+                let foreground = theme.textHex
+                let resources = imageResources
+                let generation = resources?.generation ?? 0
+                Task { @MainActor [weak resources] in
+                    WebRenderer.shared.renderMath(latex, displayMode: false, foregroundHex: foreground) { image in
                         guard let image = image else { return }
-                        Coordinator.diagramCache.setObject(image, forKey: cacheKey as NSString)
+                        Coordinator.diagramCache.setObject(image, forKey: cacheKey as NSString, cost: PreviewImage.decodedByteCost(image))
+                        resources?.insert(image, forKey: cacheKey, generation: generation)
                         NotificationCenter.default.post(name: .diagramRendered, object: docId)
                     }
                 }
@@ -2292,6 +2328,24 @@ nonisolated final class TablePayload: NSObject {
 /// table's cell backgrounds and borders to a rounded rectangle, and strokes that outline over
 /// them. `NSLayoutManager` is not main-actor-isolated, so neither is the subclass.
 nonisolated final class PreviewLayoutManager: NSLayoutManager {
+    // Key by occurrence, not payload identity: identical cached blocks can appear twice.
+    private var tableFrameCache: [Int: TableFrame] = [:]
+
+    override func invalidateLayout(forCharacterRange charRange: NSRange, actualCharacterRange actualCharRange: NSRangePointer?) {
+        tableFrameCache.removeAll(keepingCapacity: true)
+        super.invalidateLayout(forCharacterRange: charRange, actualCharacterRange: actualCharRange)
+    }
+
+    override func textContainerChangedGeometry(_ container: NSTextContainer) {
+        tableFrameCache.removeAll(keepingCapacity: true)
+        super.textContainerChangedGeometry(container)
+    }
+
+    override func processEditing(for textStorage: NSTextStorage, edited editMask: NSTextStorageEditActions, range newCharRange: NSRange, changeInLength delta: Int, invalidatedRange invalidatedCharRange: NSRange) {
+        tableFrameCache.removeAll(keepingCapacity: true)
+        super.processEditing(for: textStorage, edited: editMask, range: newCharRange, changeInLength: delta, invalidatedRange: invalidatedCharRange)
+    }
+
     override func drawBackground(forGlyphRange glyphsToShow: NSRange, at origin: NSPoint) {
         drawCodeBlockCards(forGlyphRange: glyphsToShow, at: origin)
 
@@ -2354,6 +2408,10 @@ nonisolated final class PreviewLayoutManager: NSLayoutManager {
             guard let payload = value as? TablePayload else { return }
             var tableRange = NSRange()
             _ = storage.attribute(PreviewTextView.tableKey, at: partialRange.location, longestEffectiveRange: &tableRange, in: fullRange)
+            if let cached = tableFrameCache[tableRange.location] {
+                frames.append(cached)
+                return
+            }
             // The part of the table below the visible area may not be laid out yet, and its
             // cells' bounds are needed for the frame.
             ensureLayout(forCharacterRange: tableRange)
@@ -2364,11 +2422,13 @@ nonisolated final class PreviewLayoutManager: NSLayoutManager {
                 union = union.union(boundsRect(for: block, glyphRange: glyphs))
             }
             guard !union.isNull else { return }
-            frames.append(TableFrame(
+            let frame = TableFrame(
                 payload: payload,
                 glyphRange: glyphRange(forCharacterRange: tableRange, actualCharacterRange: nil),
                 rect: union
-            ))
+            )
+            tableFrameCache[tableRange.location] = frame
+            frames.append(frame)
         }
         return frames
     }

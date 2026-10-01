@@ -7,6 +7,8 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		760000000000000000000004 /* PreviewPerformanceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 760000000000000000000003 /* PreviewPerformanceTests.swift */; };
+		760000000000000000000002 /* PreviewImage.swift in Sources */ = {isa = PBXBuildFile; fileRef = 760000000000000000000001 /* PreviewImage.swift */; };
 		F60000000000000000000003 /* HelpHTML.swift in Sources */ = {isa = PBXBuildFile; fileRef = F60000000000000000000002 /* HelpHTML.swift */; };
 		F60000000000000000000011 /* DropHandler.swift in Sources */ = {isa = PBXBuildFile; fileRef = F60000000000000000000010 /* DropHandler.swift */; };
 		F60000000000000000000013 /* WelcomeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F60000000000000000000012 /* WelcomeView.swift */; };
@@ -101,6 +103,8 @@
 /* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
+		760000000000000000000003 /* PreviewPerformanceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PreviewPerformanceTests.swift; sourceTree = "<group>"; };
+		760000000000000000000001 /* PreviewImage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PreviewImage.swift; sourceTree = "<group>"; };
 		F60000000000000000000002 /* HelpHTML.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HelpHTML.swift; sourceTree = "<group>"; };
 		F60000000000000000000010 /* DropHandler.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DropHandler.swift; sourceTree = "<group>"; };
 		F60000000000000000000012 /* WelcomeView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WelcomeView.swift; sourceTree = "<group>"; };
@@ -225,6 +229,7 @@
 				F1A2B3C4D5E6F7084 /* MarkdownParser.swift */,
 				710000000000000000000001 /* PreviewTheme.swift */,
 				710000000000000000000005 /* PreviewFont.swift */,
+				760000000000000000000001 /* PreviewImage.swift */,
 				E77A00000000000000000100 /* InlineMarkdown.swift */,
 				51AA00000000000000000001 /* SharedConstants.swift */,
 				F1A2B3C4D5E6F7086 /* MarkdownTextView.swift */,
@@ -274,6 +279,7 @@ A1111111 /* Hashlight.app */,
 				710000000000000000000007 /* PreviewFontTests.swift */,
 				7300000000000000000000A7 /* DockIconTests.swift */,
 				7400000000000000000000A7 /* SettingsModelTests.swift */,
+				760000000000000000000003 /* PreviewPerformanceTests.swift */,
 			);
 			path = HashlightTests;
 			sourceTree = "<group>";
@@ -436,6 +442,7 @@ A1111111 /* Hashlight.app */,
 				F1A2B3C4D5E6F7085 /* MarkdownParser.swift in Sources */,
 				710000000000000000000002 /* PreviewTheme.swift in Sources */,
 				710000000000000000000006 /* PreviewFont.swift in Sources */,
+				760000000000000000000002 /* PreviewImage.swift in Sources */,
 				E77A00000000000000000101 /* InlineMarkdown.swift in Sources */,
 				51AA00000000000000000011 /* SharedConstants.swift in Sources */,
 				F1A2B3C4D5E6F7087 /* MarkdownTextView.swift in Sources */,
@@ -472,6 +479,7 @@ A1111111 /* Hashlight.app */,
 				710000000000000000000008 /* PreviewFontTests.swift in Sources */,
 				7300000000000000000000A8 /* DockIconTests.swift in Sources */,
 				7400000000000000000000A8 /* SettingsModelTests.swift in Sources */,
+				760000000000000000000004 /* PreviewPerformanceTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

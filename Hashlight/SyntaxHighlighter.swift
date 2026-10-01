@@ -151,9 +151,7 @@ class SyntaxHighlighter {
         highlightPattern(#"\b\d+\.?\d*\b"#, in: result, color: theme.orangeColor)
 
         // Highlight keywords
-        for keyword in keywords {
-            highlightWord(keyword, in: result, color: theme.purpleColor)
-        }
+        highlightWords(keywords, in: result, color: theme.purpleColor)
     }
 
     private func highlightPython(_ result: NSMutableAttributedString, theme: PreviewTheme) {
@@ -170,9 +168,7 @@ class SyntaxHighlighter {
         highlightPattern(#"\b\d+\.?\d*\b"#, in: result, color: theme.orangeColor)
 
         // Keywords
-        for keyword in pythonKeywords {
-            highlightWord(keyword, in: result, color: theme.purpleColor)
-        }
+        highlightWords(pythonKeywords, in: result, color: theme.purpleColor)
     }
 
     private func highlightBash(_ result: NSMutableAttributedString, theme: PreviewTheme) {
@@ -188,9 +184,7 @@ class SyntaxHighlighter {
         highlightPattern(#"\$\{[^}]+\}"#, in: result, color: theme.yellowColor)
 
         // Keywords
-        for keyword in bashKeywords {
-            highlightWord(keyword, in: result, color: theme.purpleColor)
-        }
+        highlightWords(bashKeywords, in: result, color: theme.purpleColor)
     }
 
     private func highlightSQL(_ result: NSMutableAttributedString, theme: PreviewTheme) {
@@ -313,6 +307,19 @@ class SyntaxHighlighter {
     // MARK: - Helpers
 
     private static var regexCache: [String: NSRegularExpression] = [:]
+
+    private static var keywordPatterns: [Set<String>: String] = [:]
+
+    private func highlightWords(_ words: Set<String>, in result: NSMutableAttributedString, color: NSColor) {
+        let pattern: String
+        if let cached = Self.keywordPatterns[words] {
+            pattern = cached
+        } else {
+            pattern = "\\b(?:" + words.sorted().map(NSRegularExpression.escapedPattern(for:)).joined(separator: "|") + ")\\b"
+            Self.keywordPatterns[words] = pattern
+        }
+        highlightPattern(pattern, in: result, color: color)
+    }
 
     private func highlightPattern(_ pattern: String, in result: NSMutableAttributedString, color: NSColor) {
         let regex: NSRegularExpression
