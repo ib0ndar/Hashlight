@@ -472,10 +472,10 @@ nonisolated final class CodeBlockCopyTests: XCTestCase {
         window.contentView = scrollView
         scrollView.layoutSubtreeIfNeeded()
 
-        // Rendered form carries the "│ " prefixes; the payload is the clean source.
+        // The rendered text is the code itself; the payload carries the clean source.
         let text = NSMutableAttributedString(string: "Intro paragraph\n")
         let blockStart = text.length
-        text.append(NSAttributedString(string: "  │ let x = 1\n  │ let y = 2\n"))
+        text.append(NSAttributedString(string: "let x = 1\nlet y = 2\n"))
         text.addAttribute(PreviewTextView.codeBlockKey,
                           value: CodeBlockPayload(code: "let x = 1\nlet y = 2"),
                           range: NSRange(location: blockStart, length: text.length - blockStart))

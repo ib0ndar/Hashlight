@@ -66,6 +66,12 @@ struct MarkdownTextView: NSViewRepresentable {
         let textView = scrollView.documentView as! NSTextView
         (textView as? PreviewTextView)?.contentAlignment = contentAlignment
 
+        // The factory makes a TextKit 2 view; reading `layoutManager` switches it to TextKit 1
+        // (which the rest of this file uses), and the preview's own layout manager then draws
+        // the code-block cards.
+        _ = textView.layoutManager
+        textView.textContainer?.replaceLayoutManager(PreviewLayoutManager())
+
         // Configure text view
         textView.isEditable = false
         textView.isSelectable = true
@@ -1035,69 +1041,57 @@ struct MarkdownTextView: NSViewRepresentable {
     }
 
     private func appendCodeBlock(code: String, language: String? = nil, to result: NSMutableAttributedString) {
-        // Warp-style code block: dark background, rounded corners feel, language label
+        // A rounded card: PreviewLayoutManager draws the fill, border, and language label behind
+        // the range tagged below, so the text carries only the code. Paragraph spacing before
+        // the first line and after the last one is the card's vertical padding (line fragment
+        // rects include it); the indents are its horizontal padding.
         let blockStart = result.length
+        let codeFont = fixedFont(size: 13 * zoomLevel)
 
-        let codeBackground = theme.raisedBackgroundColor
-
-        // Top border with padding
-        let topBorder = "  ╭" + String(repeating: "─", count: 76) + "╮\n"
-        result.append(NSAttributedString(string: topBorder, attributes: [
-            .font: fixedFont(size: 11 * zoomLevel),
-            .foregroundColor: theme.commentColor
-        ]))
-
-        // Add background and left border to each line (with per-line syntax highlighting)
-        let codeLines = code.components(separatedBy: .newlines)
-        let result2 = NSMutableAttributedString()
-
-        for line in codeLines {
-            // Add left border
-            result2.append(NSAttributedString(string: "  │ ", attributes: [
-                .font: fixedFont(size: 11 * zoomLevel),
+        let label: NSAttributedString? = language.map {
+            NSAttributedString(string: $0.lowercased(), attributes: [
+                .font: fixedFont(size: 10.5 * zoomLevel),
                 .foregroundColor: theme.commentColor
-            ]))
+            ])
+        }
+        let labelWidth = label.map { ceil($0.size().width) + CodeBlockCard.labelGap } ?? 0
 
-            // Add highlighted code line
-            let highlightedLine = SyntaxHighlighter.shared.highlight(
+        let codeLines = code.components(separatedBy: .newlines)
+        for (index, line) in codeLines.enumerated() {
+            let paragraphStyle = NSMutableParagraphStyle()
+            paragraphStyle.firstLineHeadIndent = CodeBlockCard.horizontalPadding
+            paragraphStyle.headIndent = CodeBlockCard.horizontalPadding
+            // The first line leaves room for the label in the card's top-right corner.
+            paragraphStyle.tailIndent = -(CodeBlockCard.horizontalPadding + (index == 0 ? labelWidth : 0))
+            if index == 0 {
+                paragraphStyle.paragraphSpacingBefore = CodeBlockCard.verticalPadding
+            }
+            if index == codeLines.count - 1 {
+                paragraphStyle.paragraphSpacing = CodeBlockCard.verticalPadding
+            }
+
+            let highlightedLine = NSMutableAttributedString(attributedString: SyntaxHighlighter.shared.highlight(
                 code: line,
                 language: language,
-                font: fixedFont(size: 13 * zoomLevel),
+                font: codeFont,
                 theme: theme
-            )
-            let mutableLine = NSMutableAttributedString(attributedString: highlightedLine)
-
-            // Add background to the line
-            let lineRange = NSRange(location: 0, length: mutableLine.length)
-            mutableLine.addAttribute(.backgroundColor, value: codeBackground, range: lineRange)
-
-            result2.append(mutableLine)
-            result2.append(NSAttributedString(string: "\n", attributes: [
-                .backgroundColor: codeBackground
-            ]))
+            ))
+            highlightedLine.append(NSAttributedString(string: "\n", attributes: [.font: codeFont]))
+            highlightedLine.addAttribute(.paragraphStyle, value: paragraphStyle, range: NSRange(location: 0, length: highlightedLine.length))
+            result.append(highlightedLine)
         }
 
-        result.append(result2)
-
-        // Bottom border with language label
-        let langLabel = language?.lowercased() ?? "text"
-        // C2: clamp at 0 — a long language label would make this count negative, and
-        // String(repeating:count:) with a negative count is a precondition failure (crash on render).
-        let labelPadding = max(0, 76 - langLabel.count - 1)
-        let bottomBorder = "  ╰" + String(repeating: "─", count: labelPadding) + " " + langLabel + "╯\n"
-        result.append(NSAttributedString(string: bottomBorder, attributes: [
-            .font: fixedFont(size: 11 * zoomLevel),
-            .foregroundColor: theme.commentColor
-        ]))
-
-        // Tag the whole block (borders included) with its RAW source so PreviewTextView can
-        // offer a copy button. Selecting a rendered block by hand copies the box-drawing
-        // borders and the "│ " line prefixes along with the code — the payload is the only
-        // clean copy. A fresh object per block keeps adjacent blocks from merging into one
-        // effective range (attribute runs coalesce on value equality; NSObject = identity).
+        // Tag the block with its RAW source (the copy button and context menu copy it) and with
+        // the card's appearance, so the layout manager draws it from the text alone. A fresh
+        // object per block keeps adjacent blocks from merging into one effective range
+        // (attribute runs coalesce on value equality; NSObject = identity).
         result.addAttribute(
             PreviewTextView.codeBlockKey,
-            value: CodeBlockPayload(code: code),
+            value: CodeBlockPayload(
+                code: code,
+                label: label,
+                style: CodeBlockCard.Style(fill: theme.raisedBackgroundColor, border: theme.selectionColor)
+            ),
             range: NSRange(location: blockStart, length: result.length - blockStart)
         )
 
@@ -1885,7 +1879,7 @@ final class PreviewTextView: NSTextView {
 
     // MARK: Code-block copy button
 
-    static let codeBlockKey = NSAttributedString.Key("Hashlight.codeBlock")
+    nonisolated static let codeBlockKey = NSAttributedString.Key("Hashlight.codeBlock")
 
     private var hoverTrackingArea: NSTrackingArea?
     private var hoveredCodeBlock: CodeBlockPayload?
@@ -1949,9 +1943,15 @@ final class PreviewTextView: NSTextView {
             hoveredCodeBlock = payload
             codeCopyButton.showCopyState()
         }
-        // Top-right corner, just inside the block's border.
+        // Top-right corner of the card, on the first line's row, left of the language label.
         let size = CodeCopyButton.size
-        codeCopyButton.frame = NSRect(x: rect.maxX - size.width - 10, y: rect.minY + 8, width: size.width, height: size.height)
+        let labelWidth = payload.label.map { ceil($0.size().width) + 8 } ?? 0
+        codeCopyButton.frame = NSRect(
+            x: rect.maxX - CodeBlockCard.labelInset - labelWidth - size.width,
+            y: rect.minY + CodeBlockCard.verticalPadding - 3,
+            width: size.width,
+            height: size.height
+        )
         codeCopyButton.isHidden = false
     }
 
@@ -1969,7 +1969,7 @@ final class PreviewTextView: NSTextView {
         codeCopyButton.isHidden = true
     }
 
-    /// The code block whose vertical band contains `point` (view coordinates), if any.
+    /// The code block whose card contains `point` vertically (view coordinates), if any.
     /// Vertical-only containment is deliberate: hovering to the right of a short line should
     /// still count as "in the block".
     private func codeBlock(at point: NSPoint) -> (CodeBlockPayload, NSRect)? {
@@ -1989,7 +1989,8 @@ final class PreviewTextView: NSTextView {
             in: NSRange(location: 0, length: storage.length)
         ) as? CodeBlockPayload else { return nil }
         let glyphRange = layoutManager.glyphRange(forCharacterRange: range, actualCharacterRange: nil)
-        var rect = layoutManager.boundingRect(forGlyphRange: glyphRange, in: textContainer)
+        var rect = (layoutManager as? PreviewLayoutManager)?.codeBlockCardRect(forCharacterRange: range, in: textContainer)
+            ?? layoutManager.boundingRect(forGlyphRange: glyphRange, in: textContainer)
         rect.origin.x += origin.x
         rect.origin.y += origin.y
         // glyphIndex(for:) returns the NEAREST glyph even for points outside all text.
@@ -2080,12 +2081,102 @@ final class PreviewTextView: NSTextView {
 }
 
 /// Raw source of one rendered code block, attached to its attributed range under
-/// `PreviewTextView.codeBlockKey`. A class (identity equality) on purpose — see appendCodeBlock.
-final class CodeBlockPayload: NSObject {
+/// `PreviewTextView.codeBlockKey`, with the card the layout manager draws behind it. A class
+/// (identity equality) on purpose — see appendCodeBlock. Nonisolated, like the layout manager
+/// that reads it while drawing.
+nonisolated final class CodeBlockPayload: NSObject {
     let code: String
-    init(code: String) {
+    /// The fence's language, drawn in the card's top-right corner; nil when the fence has none.
+    let label: NSAttributedString?
+    let style: CodeBlockCard.Style
+
+    init(code: String, label: NSAttributedString? = nil, style: CodeBlockCard.Style = CodeBlockCard.Style(fill: .clear, border: .clear)) {
         self.code = code
+        self.label = label
+        self.style = style
         super.init()
+    }
+}
+
+/// Geometry of the code-block card, shared by the attributed text (padding through paragraph
+/// indents and spacing), the layout manager (drawing), and the text view (the copy button).
+nonisolated enum CodeBlockCard {
+    struct Style {
+        let fill: NSColor
+        let border: NSColor
+    }
+
+    static let cornerRadius: CGFloat = 8
+    static let borderWidth: CGFloat = 1
+    /// Text inset from the card's left and right edges (the container's line fragment
+    /// padding adds to it).
+    static let horizontalPadding: CGFloat = 12
+    /// Paragraph spacing before the first line and after the last one; both are inside the
+    /// card because line fragment rects include them.
+    static let verticalPadding: CGFloat = 10
+    /// The label's distance from the card's right edge, and the gap kept between it and the
+    /// first code line.
+    static let labelInset: CGFloat = 12
+    static let labelGap: CGFloat = 20
+
+    /// Where the label sits for a card of `rect` (the text view is flipped: y grows downward).
+    static func labelOrigin(for label: NSAttributedString, in rect: NSRect) -> NSPoint {
+        let size = label.size()
+        return NSPoint(x: rect.maxX - labelInset - ceil(size.width), y: rect.minY + verticalPadding + 2)
+    }
+}
+
+/// The preview's TextKit 1 layout manager: draws a rounded card behind every code block
+/// before the standard backgrounds, so selection and find highlights stay on top.
+/// `NSLayoutManager` is not main-actor-isolated, so neither is the subclass.
+nonisolated final class PreviewLayoutManager: NSLayoutManager {
+    override func drawBackground(forGlyphRange glyphsToShow: NSRange, at origin: NSPoint) {
+        drawCodeBlockCards(forGlyphRange: glyphsToShow, at: origin)
+        super.drawBackground(forGlyphRange: glyphsToShow, at: origin)
+    }
+
+    /// The card behind the code block whose attributed range is `characterRange`, in container
+    /// coordinates: the union of its first and last line fragments (so the paragraph spacing
+    /// at both ends is inside) across the container's full width. nil until the block is laid
+    /// out.
+    func codeBlockCardRect(forCharacterRange characterRange: NSRange, in container: NSTextContainer) -> NSRect? {
+        guard characterRange.length > 0 else { return nil }
+        let glyphRange = self.glyphRange(forCharacterRange: characterRange, actualCharacterRange: nil)
+        guard glyphRange.length > 0 else { return nil }
+        let first = lineFragmentRect(forGlyphAt: glyphRange.location, effectiveRange: nil)
+        let last = lineFragmentRect(forGlyphAt: glyphRange.location + glyphRange.length - 1, effectiveRange: nil)
+        return NSRect(x: 0, y: first.minY, width: container.size.width, height: last.maxY - first.minY)
+    }
+
+    private func drawCodeBlockCards(forGlyphRange glyphsToShow: NSRange, at origin: NSPoint) {
+        guard let storage = textStorage, storage.length > 0 else { return }
+        let fullRange = NSRange(location: 0, length: storage.length)
+        let shownRange = characterRange(forGlyphRange: glyphsToShow, actualGlyphRange: nil)
+        storage.enumerateAttribute(PreviewTextView.codeBlockKey, in: shownRange) { value, partialRange, _ in
+            guard let payload = value as? CodeBlockPayload else { return }
+            // The enumeration clips to the drawn range; the card needs the whole block.
+            var blockRange = NSRange()
+            _ = storage.attribute(PreviewTextView.codeBlockKey, at: partialRange.location, longestEffectiveRange: &blockRange, in: fullRange)
+            let glyphLocation = glyphIndexForCharacter(at: blockRange.location)
+            guard let container = textContainer(forGlyphAt: glyphLocation, effectiveRange: nil),
+                  let cardRect = codeBlockCardRect(forCharacterRange: blockRange, in: container) else { return }
+            let rect = cardRect.offsetBy(dx: origin.x, dy: origin.y)
+
+            let path = NSBezierPath(
+                roundedRect: rect.insetBy(dx: CodeBlockCard.borderWidth / 2, dy: CodeBlockCard.borderWidth / 2),
+                xRadius: CodeBlockCard.cornerRadius,
+                yRadius: CodeBlockCard.cornerRadius
+            )
+            payload.style.fill.setFill()
+            path.fill()
+            payload.style.border.setStroke()
+            path.lineWidth = CodeBlockCard.borderWidth
+            path.stroke()
+
+            if let label = payload.label {
+                label.draw(at: CodeBlockCard.labelOrigin(for: label, in: rect))
+            }
+        }
     }
 }
 
