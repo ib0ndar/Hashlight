@@ -7,7 +7,7 @@
 <p align="center">
   <strong>Native macOS Markdown viewer</strong><br/>
   A fast, read-only Markdown reader with tabs, a files-and-outline sidebar, folder search, and export to PDF, HTML, and Word. It never changes your files.<br/><br/>
-  <a href="https://github.com/ib0ndar/Hashlight/issues">Issues</a> · <a href="https://github.com/ib0ndar/Hashlight/blob/main/CONTRIBUTING.md">Contributing</a>
+  <a href="https://github.com/ib0ndar/Hashlight/releases/latest">Download</a> · <a href="https://github.com/ib0ndar/Hashlight/issues">Issues</a> · <a href="https://github.com/ib0ndar/Hashlight/blob/main/CONTRIBUTING.md">Contributing</a>
 </p>
 
 <p align="center">
@@ -122,14 +122,29 @@ Open .md --> Rendered document (reloads when the file changes) --> Export PDF/HT
 | **Diagrams / Math** | Headless `WKWebView` with Mermaid + KaTeX CDN scripts |
 | **File watching** | `DispatchSourceFileSystemObject` + `FSEventStream` for directories |
 | **Persistence** | `UserDefaults` + security-scoped bookmark data |
-| **Distribution** | Built from source; an optional ad-hoc signed `.dmg` for local installs (main app is not sandboxed) |
+| **Distribution** | An ad-hoc signed, universal `.dmg` on [GitHub Releases](https://github.com/ib0ndar/Hashlight/releases) (not notarized), or build from source; the main app is not sandboxed |
 | **Deployment target** | macOS 13.0+ |
 
 ---
 
 ## Quick Start
 
-There are no published releases yet, and Hashlight has no updater: build it from source.
+### Install
+
+Download the `.dmg` from the [latest release](https://github.com/ib0ndar/Hashlight/releases/latest),
+open it, and drag Hashlight to Applications. It runs on macOS 13 or later, on Apple silicon and
+Intel Macs. Hashlight has no updater: new versions appear on the
+[Releases](https://github.com/ib0ndar/Hashlight/releases) page.
+
+The app is ad-hoc signed and not notarized (it has no Apple Developer ID), so macOS blocks its
+first launch:
+
+1. Open Hashlight. macOS says it can't verify the app; click **Done**.
+2. In System Settings → Privacy & Security, go to Security and click **Open Anyway** (it is offered
+   for about an hour after the blocked launch), then confirm with your password.
+
+From then on Hashlight opens normally. On macOS 13 and 14 you can instead Control-click Hashlight
+in Applications and choose **Open**.
 
 ### Build from Source
 
@@ -154,9 +169,10 @@ remove the development registrations without deleting the build.
 ./scripts/build-dmg.sh
 ```
 
-Produces `build/Hashlight.dmg` with the drag-to-Applications installer layout. The image is
-ad-hoc signed and not notarized, so the first launch needs right-click → Open (or System
-Settings → Privacy & Security → Open Anyway).
+Produces `build/Hashlight.dmg` with the drag-to-Applications installer layout: a universal
+(Apple silicon and Intel) app built from a clean Release product. The image is ad-hoc signed and
+not notarized, so its first launch goes through **Open Anyway** as described under
+[Install](#install).
 
 ### Next to zMD
 
