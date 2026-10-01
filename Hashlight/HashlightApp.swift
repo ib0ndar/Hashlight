@@ -346,12 +346,43 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         DockIconController.shared.start(observing: SettingsManager.shared)
     }
 
-    /// The one entry point for files opened from outside the app (Finder, the Dock, `open`,
-    /// AppleScript), at launch and while running. AppKit's open-documents handler calls it with
-    /// whatever the sender put in the event: one file or a list, as bookmarks or file URLs. Do
-    /// not install a custom kAEOpenDocuments handler: it replaces AppKit's, and the one inherited
-    /// from zMD crashed on a single file and ignored lists of file URLs.
+    /// Files opened through AppKit's handler, until the main window has first appeared.
     func application(_ application: NSApplication, open urls: [URL]) {
+        OpenDocumentsEvents.open(urls)
+    }
+}
+
+/// Files opened from outside the app (Finder, the Dock, `open`, AppleScript) arrive as
+/// open-documents Apple Events, and every one ends in `open(_:)`, the one rule for them.
+///
+/// AppKit's handler routes the event through SwiftUI. That is what opens the main window when
+/// there is none yet (SwiftUI opens no window of its own when the app is launched to open
+/// documents or launched by a script), but SwiftUI also holds the reply until the app can come to
+/// the front: a script's `open` then waited for minutes and failed although the files had opened.
+/// Once the main window has appeared, DocumentManager can reopen it, so `takeOver()` installs a
+/// handler that replies at once.
+@MainActor
+final class OpenDocumentsEvents: NSObject {
+    static let shared = OpenDocumentsEvents()
+    private var isInstalled = false
+
+    func takeOver() {
+        guard !isInstalled else { return }
+        isInstalled = true
+        NSAppleEventManager.shared().setEventHandler(
+            self,
+            andSelector: #selector(handle(_:withReplyEvent:)),
+            forEventClass: AEEventClass(kCoreEventClass),
+            andEventID: AEEventID(kAEOpenDocuments)
+        )
+    }
+
+    @objc private func handle(_ event: NSAppleEventDescriptor, withReplyEvent replyEvent: NSAppleEventDescriptor) {
+        Self.open(Self.fileURLs(in: event.paramDescriptor(forKeyword: AEKeyword(keyDirectObject))))
+    }
+
+    /// Each Markdown file opens in a tab.
+    static func open(_ urls: [URL]) {
         let documentManager = DocumentManager.shared
 
         for url in urls {
@@ -362,6 +393,15 @@ class AppDelegate: NSObject, NSApplicationDelegate {
                 documentManager.loadDocument(from: url)
             }
         }
+    }
+
+    /// The files in an open-documents event's direct object, in order. Senders put one file or a
+    /// list there, as file URLs (AppleScript), bookmarks (Finder, `open`), or aliases. The handler
+    /// inherited from zMD trapped on a single file and dropped file URLs.
+    static func fileURLs(in directObject: NSAppleEventDescriptor?) -> [URL] {
+        guard let list = directObject?.coerce(toDescriptorType: DescType(typeAEList)),
+              list.numberOfItems > 0 else { return [] }
+        return (1...list.numberOfItems).compactMap { list.atIndex($0)?.fileURLValue }
     }
 }
 

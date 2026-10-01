@@ -310,8 +310,9 @@ nonisolated final class CloseWithoutPromptTests: XCTestCase {
     }
 }
 
-/// Finder, the Dock, `open`, and AppleScript all send an "open documents" Apple Event. AppKit's
-/// own handler turns it into application(_:open:), for a single file as well as a list.
+/// Finder, the Dock, `open`, and AppleScript all send an "open documents" Apple Event. Once the
+/// main window has appeared, OpenDocumentsEvents handles it: it opens the Markdown files, for a
+/// single file as well as a list, and replies at once.
 nonisolated final class OpenDocumentsEventTests: XCTestCase {
     @MainActor
     func testASingleFileOpens() throws {
@@ -332,6 +333,59 @@ nonisolated final class OpenDocumentsEventTests: XCTestCase {
     }
 
     @MainActor
+    func testFileURLsReadEveryFormSendersUse() throws {
+        let files = try makeFiles(["one.md", "two.md"])
+        let bookmark = try XCTUnwrap(NSAppleEventDescriptor(
+            descriptorType: DescType(typeBookmarkData), data: try files[1].bookmarkData()
+        ))
+        let list = NSAppleEventDescriptor.list()
+        list.insert(NSAppleEventDescriptor(fileURL: files[0]), at: 1)
+        list.insert(bookmark, at: 2)
+
+        func paths(_ directObject: NSAppleEventDescriptor?) -> [String] {
+            OpenDocumentsEvents.fileURLs(in: directObject).map { $0.resolvingSymlinksInPath().path }
+        }
+        let expected = files.map { $0.resolvingSymlinksInPath().path }
+        XCTAssertEqual(paths(list), expected, "a file URL (AppleScript) and a bookmark (Finder, open)")
+        XCTAssertEqual(paths(NSAppleEventDescriptor(fileURL: files[0])), [expected[0]], "one file, not in a list")
+        XCTAssertEqual(paths(bookmark), [expected[1]], "one bookmark, not in a list")
+        XCTAssertEqual(paths(NSAppleEventDescriptor.list()), [], "an empty list")
+        XCTAssertEqual(paths(nil), [], "no direct object")
+    }
+
+    @MainActor
+    func testAnEventReopensTheClosedMainWindow() throws {
+        // SwiftUI no longer sees these events, so once the window is closed it is DocumentManager
+        // that has to bring it back, through the opener the window registered.
+        func mainWindow() -> NSWindow? {
+            NSApp.windows.first { $0.identifier?.rawValue == "main" && $0.isVisible }
+        }
+        let manager = DocumentManager.shared
+        if mainWindow() == nil {
+            manager.showMainWindow()
+        }
+        waitUntil("the host's main window is open") { mainWindow() != nil }
+        let window = try XCTUnwrap(mainWindow(), "windows: \(NSApp.windows.map { "\($0.identifier?.rawValue ?? "-") visible=\($0.isVisible)" })")
+        let previousDocuments = manager.openDocuments
+        let previousSelectedId = manager.selectedDocumentId
+        defer {
+            manager.openDocuments = previousDocuments
+            manager.selectedDocumentId = previousSelectedId
+            if mainWindow() == nil {
+                manager.showMainWindow()
+            }
+        }
+
+        window.performClose(nil)
+        waitUntil("the main window closes") { mainWindow() == nil }
+
+        let files = try makeFiles(["reopen.md"])
+        try assertOpenDocumentsEvent(NSAppleEventDescriptor(fileURL: files[0]), opens: files) {
+            self.waitUntil("the main window reopens") { mainWindow() != nil }
+        }
+    }
+
+    @MainActor
     private func makeFiles(_ names: [String]) throws -> [URL] {
         let directory = FileManager.default.temporaryDirectory
             .appendingPathComponent("hashlight-open-\(UUID().uuidString)", isDirectory: true)
@@ -345,9 +399,11 @@ nonisolated final class OpenDocumentsEventTests: XCTestCase {
     }
 
     /// Sends this process an "open documents" event and waits for `expected` to open as the
-    /// newest tabs, in order. Puts the tabs and the recent files back afterwards.
+    /// newest tabs, in order; `whileOpen` runs before they close again. Puts the tabs and the
+    /// recent files back afterwards.
     @MainActor
-    private func assertOpenDocumentsEvent(_ directObject: NSAppleEventDescriptor, opens expected: [URL]) throws {
+    private func assertOpenDocumentsEvent(_ directObject: NSAppleEventDescriptor, opens expected: [URL],
+                                          whileOpen: () throws -> Void = {}) throws {
         let manager = DocumentManager.shared
         let previousDocuments = manager.openDocuments
         let previousSelectedId = manager.selectedDocumentId
@@ -372,13 +428,11 @@ nonisolated final class OpenDocumentsEventTests: XCTestCase {
             transactionID: AETransactionID(kAnyTransactionID)
         )
         event.setParam(directObject, forKeyword: AEKeyword(keyDirectObject))
-        do {
-            try event.sendEvent(options: [.noReply], timeout: 0.5)
-        } catch let error as NSError where error.domain == NSOSStatusErrorDomain && error.code == Int(errAETimeout) {
-            // An event sent to this process is dispatched in place. AppKit suspends it and opens
-            // the files on a later turn of the run loop, which the send cannot wait for, so it
-            // times out; the poll below sees the files open.
-        }
+        // The sender waits for the reply. AppKit's own handler held it until the app could come
+        // to the front, so a script's `open` timed out whenever Hashlight stayed behind. The
+        // host's window may not have appeared yet, so take the events over here.
+        OpenDocumentsEvents.shared.takeOver()
+        try event.sendEvent(options: [.waitForReply], timeout: 5)
 
         func path(_ url: URL) -> String { url.resolvingSymlinksInPath().path }
         let expectedPaths = expected.map(path)
@@ -386,19 +440,25 @@ nonisolated final class OpenDocumentsEventTests: XCTestCase {
             manager.openDocuments.filter { !previousIds.contains($0.id) }.map { path($0.url) }
         }
 
-        let opened = expectation(description: "the event's Markdown files open as tabs")
-        var attempts = 0
+        waitUntil("the event's Markdown files open as tabs") { openedPaths() == expectedPaths }
+        XCTAssertEqual(openedPaths(), expectedPaths)
+        try whileOpen()
+    }
+
+    /// Polls `condition` on the main run loop for up to `timeout` seconds.
+    @MainActor
+    private func waitUntil(_ description: String, timeout: TimeInterval = 5, _ condition: @escaping () -> Bool) {
+        let done = expectation(description: description)
+        let deadline = Date().addingTimeInterval(timeout)
         func poll() {
-            attempts += 1
-            if openedPaths() == expectedPaths {
-                opened.fulfill()
-            } else if attempts < 80 {
+            if condition() {
+                done.fulfill()
+            } else if Date() < deadline {
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.05, execute: poll)
             }
         }
         poll()
-        wait(for: [opened], timeout: 5.0)
-        XCTAssertEqual(openedPaths(), expectedPaths)
+        wait(for: [done], timeout: timeout + 1)
     }
 }
 

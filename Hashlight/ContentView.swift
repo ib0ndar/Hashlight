@@ -97,6 +97,7 @@ struct ContentView: View {
             documentManager.registerMainWindowCloser {
                 dismissWindow()
             }
+            OpenDocumentsEvents.shared.takeOver()
             magnifyMonitor = NSEvent.addLocalMonitorForEvents(matching: .magnify) { event in
                 if event.phase == .began {
                     baseZoomForGesture = SettingsManager.shared.zoomLevel
