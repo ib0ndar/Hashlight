@@ -128,6 +128,20 @@ nonisolated final class PreviewThemeTests: XCTestCase {
     }
 
     @MainActor
+    func testNewUsersStartOnTheSystemThemes() {
+        XCTAssertEqual(PreviewThemeCatalog.defaultLightID, PreviewTheme.systemLightID)
+        XCTAssertEqual(PreviewThemeCatalog.defaultDarkID, PreviewTheme.systemDarkID)
+        // Nothing saved → System; an unknown saved value → System; a saved Base16 theme is kept.
+        XCTAssertEqual(PreviewThemeCatalog.validatedLightID(nil), PreviewTheme.systemLightID)
+        XCTAssertEqual(PreviewThemeCatalog.validatedDarkID(nil), PreviewTheme.systemDarkID)
+        XCTAssertEqual(PreviewThemeCatalog.validatedLightID("no-such-theme"), PreviewTheme.systemLightID)
+        XCTAssertEqual(PreviewThemeCatalog.validatedLightID("github"), "github")
+        XCTAssertEqual(PreviewThemeCatalog.validatedDarkID("github-dark"), "github-dark")
+        XCTAssertEqual(PreviewThemeCatalog.resolve(lightID: "", darkID: "", colorScheme: .light).id, PreviewTheme.systemLightID)
+        XCTAssertEqual(PreviewThemeCatalog.resolve(lightID: "", darkID: "", colorScheme: .dark).id, PreviewTheme.systemDarkID)
+    }
+
+    @MainActor
     func testApplicationAppearanceReturnsFromForcedDarkToSystemImmediately() {
         let application = NSApplication.shared
         let originalAppearance = application.appearance

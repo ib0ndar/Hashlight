@@ -184,8 +184,9 @@ struct PreviewThemeBundle: Decodable, Sendable {
 }
 
 enum PreviewThemeCatalog {
-    static let defaultLightID = "github"
-    static let defaultDarkID = "github-dark"
+    /// New users start on the System themes; a saved Base16 choice is kept.
+    static let defaultLightID = PreviewTheme.systemLightID
+    static let defaultDarkID = PreviewTheme.systemDarkID
 
     /// The pinned Base16 catalog, loaded once.
     static let bundled: [PreviewTheme] = {
