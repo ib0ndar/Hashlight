@@ -39,9 +39,16 @@ trap cleanup_on_exit EXIT
 
 echo "==> Building Release (ad-hoc signed)..."
 cd "$PROJECT_DIR"
+# Start from an empty product: a Release test run embeds HashlightTests.xctest in the app's
+# PlugIns, and an incremental build never removes it.
+"$REGISTRATION_MANAGER" unregister --quiet
+rm -rf "$RELEASE_PRODUCTS_DIR/$APP_NAME" "$RELEASE_PRODUCTS_DIR/$APP_NAME.dSYM"
 # Ad-hoc signing builds the app and its sandboxed Quick Look extension without a Developer ID
-# certificate; the extension's configured entitlements are still embedded.
+# certificate; the extension's configured entitlements are still embedded. The generic
+# destination builds every architecture in ARCHS; without it, xcodebuild picks this Mac and
+# builds only its architecture.
 "$SCRIPT_DIR/xcodebuild-hashlight.sh" -configuration Release \
+    -destination 'generic/platform=macOS' \
     CODE_SIGN_IDENTITY=- DEVELOPMENT_TEAM= CODE_SIGN_STYLE=Manual \
     OTHER_CODE_SIGN_FLAGS= CODE_SIGN_INJECT_BASE_ENTITLEMENTS=NO \
     build \
@@ -51,6 +58,21 @@ if [ ! -d "$RELEASE_PRODUCTS_DIR/$APP_NAME" ]; then
     echo "ERROR: Build failed - no app found"
     exit 1
 fi
+
+APP_BUNDLE="$RELEASE_PRODUCTS_DIR/$APP_NAME"
+PLUGINS="$(ls "$APP_BUNDLE/Contents/PlugIns")"
+if [ "$PLUGINS" != "HashlightQuickLook.appex" ]; then
+    echo "ERROR: Unexpected app plug-ins: $(echo "$PLUGINS" | tr '\n' ' ')"
+    exit 1
+fi
+for binary in "$APP_BUNDLE/Contents/MacOS/Hashlight" \
+    "$APP_BUNDLE/Contents/PlugIns/HashlightQuickLook.appex/Contents/MacOS/HashlightQuickLook"; do
+    archs="$(lipo -archs "$binary")"
+    if [[ " $archs " != *" arm64 "* || " $archs " != *" x86_64 "* ]]; then
+        echo "ERROR: $(basename "$binary") is not universal: $archs"
+        exit 1
+    fi
+done
 
 echo "==> Generating background image..."
 python3 - "$BUILD_DIR" "$WIN_W" "$WIN_H" << 'PYEOF'

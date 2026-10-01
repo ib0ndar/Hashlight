@@ -104,8 +104,10 @@ Open an issue at <https://github.com/ib0ndar/Hashlight/issues> with:
 ## Releases
 
 Hashlight releases are ad-hoc signed and disclose that they are not Developer ID signed or
-notarized. Build the DMG with `./scripts/build-dmg.sh`; it lays out the disk image with
-`dmgbuild`, installed on demand into `build/dmg-venv`, and never scripts Finder.
+notarized. Build the DMG with `./scripts/build-dmg.sh`; it builds a universal app from a clean
+Release product (and stops if the app holds anything but the Quick Look extension or misses an
+architecture), lays out the disk image with `dmgbuild`, installed on demand into
+`build/dmg-venv`, and never scripts Finder.
 
 ## License
 
