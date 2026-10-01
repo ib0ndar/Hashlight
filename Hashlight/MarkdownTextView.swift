@@ -1210,6 +1210,7 @@ struct MarkdownTextView: NSViewRepresentable {
         let columnWidths = MarkdownTableColumnLayout.widthPercentages(for: rows, configuration: tableColumnConfiguration)
 
         let borderColor = theme.selectionColor
+        let tableStart = result.length
 
         for (rowIndex, row) in rows.enumerated() {
             let isHeader = rowIndex == 0
@@ -1281,6 +1282,15 @@ struct MarkdownTextView: NSViewRepresentable {
                 result.append(NSAttributedString(string: "\n", attributes: attrs))
             }
         }
+
+        // PreviewLayoutManager clips the cells to a rounded rectangle and strokes its outline,
+        // so the table's corners match the code-block cards (NSTextBlock borders are square).
+        // A fresh object per table keeps adjacent tables from merging into one effective range.
+        result.addAttribute(
+            PreviewTextView.tableKey,
+            value: TablePayload(borderColor: borderColor),
+            range: NSRange(location: tableStart, length: result.length - tableStart)
+        )
 
         // Spacing after table
         result.append(NSAttributedString(string: "\n"))
@@ -1880,6 +1890,7 @@ final class PreviewTextView: NSTextView {
     // MARK: Code-block copy button
 
     nonisolated static let codeBlockKey = NSAttributedString.Key("Hashlight.codeBlock")
+    nonisolated static let tableKey = NSAttributedString.Key("Hashlight.table")
 
     private var hoverTrackingArea: NSTrackingArea?
     private var hoveredCodeBlock: CodeBlockPayload?
@@ -2126,13 +2137,100 @@ nonisolated enum CodeBlockCard {
     }
 }
 
-/// The preview's TextKit 1 layout manager: draws a rounded card behind every code block
-/// before the standard backgrounds, so selection and find highlights stay on top.
-/// `NSLayoutManager` is not main-actor-isolated, so neither is the subclass.
+/// Marks one rendered table's attributed range under `PreviewTextView.tableKey` so the layout
+/// manager can round its corners. A class (identity equality) on purpose — see appendTable.
+nonisolated final class TablePayload: NSObject {
+    let borderColor: NSColor
+    init(borderColor: NSColor) {
+        self.borderColor = borderColor
+        super.init()
+    }
+}
+
+/// The preview's TextKit 1 layout manager. It draws a rounded card behind every code block
+/// before the standard backgrounds (so selection and find highlights stay on top), clips each
+/// table's cell backgrounds and borders to a rounded rectangle, and strokes that outline over
+/// them. `NSLayoutManager` is not main-actor-isolated, so neither is the subclass.
 nonisolated final class PreviewLayoutManager: NSLayoutManager {
     override func drawBackground(forGlyphRange glyphsToShow: NSRange, at origin: NSPoint) {
         drawCodeBlockCards(forGlyphRange: glyphsToShow, at: origin)
-        super.drawBackground(forGlyphRange: glyphsToShow, at: origin)
+
+        let tables = tableFrames(intersecting: glyphsToShow)
+        guard !tables.isEmpty else {
+            super.drawBackground(forGlyphRange: glyphsToShow, at: origin)
+            return
+        }
+
+        // The standard drawing of a cell paints its whole block, so a table's part of the
+        // range is drawn in one call under a rounded clip; the rest is drawn as usual.
+        var cursor = glyphsToShow.location
+        let end = NSMaxRange(glyphsToShow)
+        for table in tables {
+            let tableStart = max(table.glyphRange.location, cursor)
+            let tableEnd = min(NSMaxRange(table.glyphRange), end)
+            if tableStart > cursor {
+                super.drawBackground(forGlyphRange: NSRange(location: cursor, length: tableStart - cursor), at: origin)
+            }
+            NSGraphicsContext.saveGraphicsState()
+            Self.tablePath(for: table.rect.offsetBy(dx: origin.x, dy: origin.y)).addClip()
+            super.drawBackground(forGlyphRange: NSRange(location: tableStart, length: tableEnd - tableStart), at: origin)
+            NSGraphicsContext.restoreGraphicsState()
+            cursor = tableEnd
+        }
+        if cursor < end {
+            super.drawBackground(forGlyphRange: NSRange(location: cursor, length: end - cursor), at: origin)
+        }
+
+        for table in tables {
+            let path = Self.tablePath(for: table.rect.offsetBy(dx: origin.x, dy: origin.y))
+            table.payload.borderColor.setStroke()
+            path.lineWidth = CodeBlockCard.borderWidth
+            path.stroke()
+        }
+    }
+
+    private struct TableFrame {
+        let payload: TablePayload
+        let glyphRange: NSRange
+        let rect: NSRect
+    }
+
+    private static func tablePath(for rect: NSRect) -> NSBezierPath {
+        NSBezierPath(
+            roundedRect: rect.insetBy(dx: CodeBlockCard.borderWidth / 2, dy: CodeBlockCard.borderWidth / 2),
+            xRadius: CodeBlockCard.cornerRadius,
+            yRadius: CodeBlockCard.cornerRadius
+        )
+    }
+
+    /// The tables whose text intersects `glyphsToShow`, in order, each with its full glyph
+    /// range and frame in container coordinates (the union of its cells' bounds).
+    private func tableFrames(intersecting glyphsToShow: NSRange) -> [TableFrame] {
+        guard let storage = textStorage, storage.length > 0 else { return [] }
+        let fullRange = NSRange(location: 0, length: storage.length)
+        let shownRange = characterRange(forGlyphRange: glyphsToShow, actualGlyphRange: nil)
+        var frames: [TableFrame] = []
+        storage.enumerateAttribute(PreviewTextView.tableKey, in: shownRange) { value, partialRange, _ in
+            guard let payload = value as? TablePayload else { return }
+            var tableRange = NSRange()
+            _ = storage.attribute(PreviewTextView.tableKey, at: partialRange.location, longestEffectiveRange: &tableRange, in: fullRange)
+            // The part of the table below the visible area may not be laid out yet, and its
+            // cells' bounds are needed for the frame.
+            ensureLayout(forCharacterRange: tableRange)
+            var union = NSRect.null
+            storage.enumerateAttribute(.paragraphStyle, in: tableRange) { style, paragraphRange, _ in
+                guard let block = (style as? NSParagraphStyle)?.textBlocks.first else { return }
+                let glyphs = glyphRange(forCharacterRange: paragraphRange, actualCharacterRange: nil)
+                union = union.union(boundsRect(for: block, glyphRange: glyphs))
+            }
+            guard !union.isNull else { return }
+            frames.append(TableFrame(
+                payload: payload,
+                glyphRange: glyphRange(forCharacterRange: tableRange, actualCharacterRange: nil),
+                rect: union
+            ))
+        }
+        return frames
     }
 
     /// The card behind the code block whose attributed range is `characterRange`, in container
