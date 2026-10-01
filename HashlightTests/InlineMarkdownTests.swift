@@ -310,6 +310,98 @@ nonisolated final class CloseWithoutPromptTests: XCTestCase {
     }
 }
 
+/// Finder, the Dock, `open`, and AppleScript all send an "open documents" Apple Event. AppKit's
+/// own handler turns it into application(_:open:), for a single file as well as a list.
+nonisolated final class OpenDocumentsEventTests: XCTestCase {
+    @MainActor
+    func testASingleFileOpens() throws {
+        // AppleScript's `open POSIX file …` sends one file rather than a list. The handler
+        // inherited from zMD trapped on it: `1...numberOfItems` with zero items.
+        let files = try makeFiles(["single.md"])
+        try assertOpenDocumentsEvent(NSAppleEventDescriptor(fileURL: files[0]), opens: files)
+    }
+
+    @MainActor
+    func testAListOpensItsMarkdownFilesInOrder() throws {
+        let files = try makeFiles(["Upper.MD", "notes.txt", "long.markdown"])
+        let list = NSAppleEventDescriptor.list()
+        for (index, url) in files.enumerated() {
+            list.insert(NSAppleEventDescriptor(fileURL: url), at: index + 1)
+        }
+        try assertOpenDocumentsEvent(list, opens: [files[0], files[2]])
+    }
+
+    @MainActor
+    private func makeFiles(_ names: [String]) throws -> [URL] {
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("hashlight-open-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        addTeardownBlock { try? FileManager.default.removeItem(at: directory) }
+        return try names.map { name in
+            let url = directory.appendingPathComponent(name)
+            try "# \(name)".write(to: url, atomically: true, encoding: .utf8)
+            return url
+        }
+    }
+
+    /// Sends this process an "open documents" event and waits for `expected` to open as the
+    /// newest tabs, in order. Puts the tabs and the recent files back afterwards.
+    @MainActor
+    private func assertOpenDocumentsEvent(_ directObject: NSAppleEventDescriptor, opens expected: [URL]) throws {
+        let manager = DocumentManager.shared
+        let previousDocuments = manager.openDocuments
+        let previousSelectedId = manager.selectedDocumentId
+        let previousRecentFiles = manager.recentFileURLs
+        let previousRecentData = UserDefaults.standard.array(forKey: DefaultsKeys.recentFiles)
+        let previousIds = Set(previousDocuments.map(\.id))
+        defer {
+            for document in manager.openDocuments where !previousIds.contains(document.id) {
+                manager.closeDocument(document)
+            }
+            manager.openDocuments = previousDocuments
+            manager.selectedDocumentId = previousSelectedId
+            manager.recentFileURLs = previousRecentFiles
+            UserDefaults.standard.set(previousRecentData, forKey: DefaultsKeys.recentFiles)
+        }
+
+        let event = NSAppleEventDescriptor(
+            eventClass: AEEventClass(kCoreEventClass),
+            eventID: AEEventID(kAEOpenDocuments),
+            targetDescriptor: NSAppleEventDescriptor(processIdentifier: ProcessInfo.processInfo.processIdentifier),
+            returnID: AEReturnID(kAutoGenerateReturnID),
+            transactionID: AETransactionID(kAnyTransactionID)
+        )
+        event.setParam(directObject, forKeyword: AEKeyword(keyDirectObject))
+        do {
+            try event.sendEvent(options: [.noReply], timeout: 0.5)
+        } catch let error as NSError where error.domain == NSOSStatusErrorDomain && error.code == Int(errAETimeout) {
+            // An event sent to this process is dispatched in place. AppKit suspends it and opens
+            // the files on a later turn of the run loop, which the send cannot wait for, so it
+            // times out; the poll below sees the files open.
+        }
+
+        func path(_ url: URL) -> String { url.resolvingSymlinksInPath().path }
+        let expectedPaths = expected.map(path)
+        func openedPaths() -> [String] {
+            manager.openDocuments.filter { !previousIds.contains($0.id) }.map { path($0.url) }
+        }
+
+        let opened = expectation(description: "the event's Markdown files open as tabs")
+        var attempts = 0
+        func poll() {
+            attempts += 1
+            if openedPaths() == expectedPaths {
+                opened.fulfill()
+            } else if attempts < 80 {
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.05, execute: poll)
+            }
+        }
+        poll()
+        wait(for: [opened], timeout: 5.0)
+        XCTAssertEqual(openedPaths(), expectedPaths)
+    }
+}
+
 nonisolated final class FolderManagerTests: XCTestCase {
     @MainActor
     func testFolderScanDoesNotRecurseIntoSymlinkCycle() throws {

@@ -344,18 +344,14 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         // change, unlike clearing SwiftUI's preferredColorScheme on a Settings scene.
         ApplicationAppearance.apply(SettingsManager.shared.colorScheme, to: NSApplication.shared)
         DockIconController.shared.start(observing: SettingsManager.shared)
-
-        // Register for Apple Events to handle file opening
-        NSAppleEventManager.shared().setEventHandler(
-            self,
-            andSelector: #selector(handleGetURLEvent(_:withReplyEvent:)),
-            forEventClass: AEEventClass(kCoreEventClass),
-            andEventID: AEEventID(kAEOpenDocuments)
-        )
     }
 
+    /// The one entry point for files opened from outside the app (Finder, the Dock, `open`,
+    /// AppleScript), at launch and while running. AppKit's open-documents handler calls it with
+    /// whatever the sender put in the event: one file or a list, as bookmarks or file URLs. Do
+    /// not install a custom kAEOpenDocuments handler: it replaces AppKit's, and the one inherited
+    /// from zMD crashed on a single file and ignored lists of file URLs.
     func application(_ application: NSApplication, open urls: [URL]) {
-        // Handle files opened from Finder using shared DocumentManager
         let documentManager = DocumentManager.shared
 
         for url in urls {
@@ -364,22 +360,6 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             let ext = url.pathExtension.lowercased()
             if ext == "md" || ext == "markdown" {
                 documentManager.loadDocument(from: url)
-            }
-        }
-    }
-
-    @objc func handleGetURLEvent(_ event: NSAppleEventDescriptor, withReplyEvent replyEvent: NSAppleEventDescriptor) {
-        let documentManager = DocumentManager.shared
-
-        if let urlList = event.paramDescriptor(forKeyword: AEKeyword(keyDirectObject)) {
-            for i in 1...urlList.numberOfItems {
-                if let urlString = urlList.atIndex(i)?.stringValue,
-                   let url = URL(string: urlString) {
-                    let ext = url.pathExtension.lowercased()
-                    if ext == "md" || ext == "markdown" {
-                        documentManager.loadDocument(from: url)
-                    }
-                }
             }
         }
     }
