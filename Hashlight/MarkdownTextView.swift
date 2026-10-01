@@ -17,6 +17,10 @@ struct MarkdownTextView: NSViewRepresentable {
     let currentMatchIndex: Int
     let mainFontID: String
     let fixedFontID: String
+    /// Body text and code-block sizes at 100 % zoom (Settings → Viewing → Fonts). Every size in
+    /// the build is written for the defaults and scaled by `mainScale` or `fixedScale`.
+    let mainFontSize: CGFloat
+    let fixedFontSize: CGFloat
     let theme: PreviewTheme
     let zoomLevel: CGFloat
     /// Whether a leading YAML block is rendered (as a folded card) or left out entirely.
@@ -37,7 +41,7 @@ struct MarkdownTextView: NSViewRepresentable {
     let tableColumnConfiguration: MarkdownTableColumnConfiguration?
     private var imageResources: PreviewImageResources?
 
-    init(content: String, baseURL: URL?, directoryBookmark: Data? = nil, documentId: UUID, scrollToHeadingId: Binding<String?>, searchText: String, currentMatchIndex: Int, mainFontID: String, fixedFontID: String, theme: PreviewTheme, zoomLevel: CGFloat = 1.0, initialScrollPosition: CGFloat = 0, onScrollPositionChanged: ((CGFloat) -> Void)? = nil, onMatchCountChanged: ((Int) -> Void)? = nil, contentAlignment: SettingsManager.ContentAlignment = .left, contentWidth: SettingsManager.ContentWidth = .medium, pageMargin: SettingsManager.PageMargin = .normal, tableColumnConfiguration: MarkdownTableColumnConfiguration? = nil, showsFrontmatter: Bool = true) {
+    init(content: String, baseURL: URL?, directoryBookmark: Data? = nil, documentId: UUID, scrollToHeadingId: Binding<String?>, searchText: String, currentMatchIndex: Int, mainFontID: String, fixedFontID: String, mainFontSize: CGFloat = CGFloat(PreviewFontCatalog.defaultMainSize), fixedFontSize: CGFloat = CGFloat(PreviewFontCatalog.defaultFixedSize), theme: PreviewTheme, zoomLevel: CGFloat = 1.0, initialScrollPosition: CGFloat = 0, onScrollPositionChanged: ((CGFloat) -> Void)? = nil, onMatchCountChanged: ((Int) -> Void)? = nil, contentAlignment: SettingsManager.ContentAlignment = .left, contentWidth: SettingsManager.ContentWidth = .medium, pageMargin: SettingsManager.PageMargin = .normal, tableColumnConfiguration: MarkdownTableColumnConfiguration? = nil, showsFrontmatter: Bool = true) {
         self.content = content
         self.baseURL = baseURL
         self.directoryBookmark = directoryBookmark
@@ -47,6 +51,8 @@ struct MarkdownTextView: NSViewRepresentable {
         self.currentMatchIndex = currentMatchIndex
         self.mainFontID = mainFontID
         self.fixedFontID = fixedFontID
+        self.mainFontSize = mainFontSize
+        self.fixedFontSize = fixedFontSize
         self.theme = theme
         self.zoomLevel = zoomLevel
         self.initialScrollPosition = initialScrollPosition
@@ -61,7 +67,17 @@ struct MarkdownTextView: NSViewRepresentable {
 
     /// Everything besides content + zoom that changes what gets built.
     private var styleKey: String {
-        "\(mainFontID)-\(fixedFontID)-\(contentWidth.rawValue)-\(theme.cacheKey)-\(tableColumnConfiguration?.cacheKey ?? "content-sized")-\(showsFrontmatter ? "fm" : "nofm")"
+        "\(mainFontID)-\(fixedFontID)-\(mainFontSize)-\(fixedFontSize)-\(contentWidth.rawValue)-\(theme.cacheKey)-\(tableColumnConfiguration?.cacheKey ?? "content-sized")-\(showsFrontmatter ? "fm" : "nofm")"
+    }
+
+    /// Scale of every proportional size against the 16 pt default body text.
+    private var mainScale: CGFloat {
+        mainFontSize / CGFloat(PreviewFontCatalog.defaultMainSize)
+    }
+
+    /// Scale of every monospaced size against the 13 pt default code blocks.
+    private var fixedScale: CGFloat {
+        fixedFontSize / CGFloat(PreviewFontCatalog.defaultFixedSize)
     }
 
     func makeNSView(context: Context) -> NSScrollView {
@@ -1226,7 +1242,7 @@ struct MarkdownTextView: NSViewRepresentable {
 
         // Accent-colored bar character
         let barAttr = NSAttributedString(string: "  ┃ ", attributes: [
-            .font: NSFont.systemFont(ofSize: 16 * zoomLevel),
+            .font: NSFont.systemFont(ofSize: 16 * zoomLevel * mainScale),
             .foregroundColor: theme.cyanColor.withAlphaComponent(0.75),
             .paragraphStyle: paragraphStyle
         ])
@@ -1270,7 +1286,7 @@ struct MarkdownTextView: NSViewRepresentable {
 
         func bar(_ style: NSParagraphStyle) -> NSAttributedString {
             NSAttributedString(string: "  ┃ ", attributes: [
-                .font: NSFont.systemFont(ofSize: 16 * zoomLevel),
+                .font: NSFont.systemFont(ofSize: 16 * zoomLevel * mainScale),
                 .foregroundColor: color,
                 .paragraphStyle: style
             ])
@@ -1279,14 +1295,14 @@ struct MarkdownTextView: NSViewRepresentable {
         // Title row: bar, tinted SF Symbol, bold kind name.
         let titleFont = mainFont(size: 15 * zoomLevel).withWeight(.semibold)
         result.append(bar(titleStyle))
-        let symbolConfig = NSImage.SymbolConfiguration(pointSize: 14 * zoomLevel, weight: .medium)
+        let symbolConfig = NSImage.SymbolConfiguration(pointSize: 14 * zoomLevel * mainScale, weight: .medium)
             .applying(NSImage.SymbolConfiguration(paletteColors: [color]))
         if let symbol = NSImage(systemSymbolName: kind.symbolName, accessibilityDescription: kind.title)?
             .withSymbolConfiguration(symbolConfig) {
             let attachment = NSTextAttachment()
             attachment.image = symbol
             // Drop the glyph slightly so it sits on the text baseline rather than floating.
-            attachment.bounds = NSRect(x: 0, y: -2.5 * zoomLevel, width: symbol.size.width, height: symbol.size.height)
+            attachment.bounds = NSRect(x: 0, y: -2.5 * zoomLevel * mainScale, width: symbol.size.width, height: symbol.size.height)
             let icon = NSMutableAttributedString(attachment: attachment)
             icon.addAttribute(.paragraphStyle, value: titleStyle, range: NSRange(location: 0, length: icon.length))
             result.append(icon)
@@ -1603,7 +1619,7 @@ struct MarkdownTextView: NSViewRepresentable {
             let placeholder = NSMutableAttributedString()
             placeholder.append(NSAttributedString(string: "\n", attributes: [:]))
             placeholder.append(NSAttributedString(string: "    Rendering diagram...\n", attributes: [
-                .font: NSFont.systemFont(ofSize: 13 * zoomLevel, weight: .medium),
+                .font: NSFont.systemFont(ofSize: 13 * zoomLevel * mainScale, weight: .medium),
                 .foregroundColor: theme.secondaryTextColor,
                 .paragraphStyle: placeholderStyle
             ]))
@@ -1641,7 +1657,7 @@ struct MarkdownTextView: NSViewRepresentable {
             paragraphStyle.alignment = .center
             paragraphStyle.paragraphSpacing = 8
             result.append(NSAttributedString(string: "  Rendering math...\n", attributes: [
-                .font: NSFont.systemFont(ofSize: 13 * zoomLevel, weight: .medium),
+                .font: NSFont.systemFont(ofSize: 13 * zoomLevel * mainScale, weight: .medium),
                 .foregroundColor: theme.secondaryTextColor,
                 .paragraphStyle: paragraphStyle
             ]))
@@ -1699,7 +1715,7 @@ struct MarkdownTextView: NSViewRepresentable {
         let styledHTML = """
         <html><head><meta charset="utf-8"><style>
         body { font-family: \(mainCSSFamily);
-               font-size: \(fontSize)px; color: \(textColor); background: \(bgColor);
+               font-size: \(fontSize * mainScale)px; color: \(textColor); background: \(bgColor);
                line-height: 1.5; margin: 0; padding: 0; }
         a { color: \(linkColor); }
         code, pre, kbd, samp { font-family: \(fixedCSSFamily); }
@@ -1762,7 +1778,9 @@ struct MarkdownTextView: NSViewRepresentable {
                 result.append(NSAttributedString(string: "\n", attributes: tokenAttributes))
             case .code(let text):
                 tokenAttributes[Self.codeSpanSentinel] = true
-                tokenAttributes[.font] = fixedFont(size: baseFont.pointSize - 1)
+                // Inline code sits in a line of prose: a point below its text at the default
+                // size, following the main size only (the fixed size is for code blocks).
+                tokenAttributes[.font] = PreviewFontCatalog.fixedFont(id: fixedFontID, size: baseFont.pointSize - mainScale)
                 tokenAttributes[.foregroundColor] = theme.greenColor
                 tokenAttributes[.backgroundColor] = theme.raisedBackgroundColor
                 result.append(NSAttributedString(string: text, attributes: tokenAttributes))
@@ -1913,12 +1931,13 @@ struct MarkdownTextView: NSViewRepresentable {
 
     // MARK: - Helpers
 
+    /// Fonts are requested at their default-size values; these apply the Settings sizes.
     private func mainFont(size: CGFloat) -> NSFont {
-        PreviewFontCatalog.mainFont(id: mainFontID, size: size)
+        PreviewFontCatalog.mainFont(id: mainFontID, size: size * mainScale)
     }
 
     private func fixedFont(size: CGFloat) -> NSFont {
-        PreviewFontCatalog.fixedFont(id: fixedFontID, size: size)
+        PreviewFontCatalog.fixedFont(id: fixedFontID, size: size * fixedScale)
     }
 
 }

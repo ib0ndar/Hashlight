@@ -103,7 +103,7 @@ Open .md --> Rendered document (reloads when the file changes) --> Export PDF/HT
 - **Status bar** — word count, character count, reading time, layout, zoom, detected encoding
 - **Zoom** — `⌘+` / `⌘−` / `⌘0`, pinch-to-zoom trackpad gesture
 - **Themes** — System / Light / Dark application appearance, with separate menus for the light and dark document theme: a **System** theme (the default) built from macOS's own colors (text background, labels, separators, your accent color for headings and links), plus 102 light and 249 dark Base16 palettes
-- **Fonts** — independently select an installed proportional font for Markdown text and a monospaced font for code and commands
+- **Fonts** — independently select an installed proportional font for Markdown text and a monospaced font for code and commands, each with its own size (8–32 pt; Reset returns to 16 and 13 pt)
 - **Adaptive icon** — a Liquid Glass `#` lit by an amber spark; on macOS 26 it follows the system's icon style (Frost by default, Ember in dark, plus Clear and Tinted)
 - **Dock icon** — keep the system's choice or always show Frost or Ember in the Dock and app switcher (Settings → General)
 - **Settings** — three panes: **General** (appearance, Dock icon, tabs), **Viewing** (themes, fonts, layout, frontmatter), and **Tables** (column sizing by header category, off by default); Settings reopens on the pane you used last

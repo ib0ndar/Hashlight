@@ -13,6 +13,24 @@ enum PreviewFontCatalog {
     static let systemMainID = "__hashlight_system_main__"
     static let systemFixedID = "__hashlight_system_fixed__"
 
+    /// Body text size at 100 % zoom. Every proportional size in the preview (headings, tables,
+    /// labels) and inline code are scaled by `mainSize / defaultMainSize`.
+    static let defaultMainSize: Double = 16
+    /// Code-block size at 100 % zoom. Code blocks, their labels, and the frontmatter YAML scale by
+    /// `fixedSize / defaultFixedSize`; inline code follows the main size instead.
+    static let defaultFixedSize: Double = 13
+    static let mainSizeRange: ClosedRange<Double> = 8...32
+    static let fixedSizeRange: ClosedRange<Double> = 8...32
+
+    /// A saved size as a whole point within `range`; anything else (absent, wrong type, not
+    /// finite) is the default.
+    static func validatedSize(_ value: Any?, default defaultSize: Double, range: ClosedRange<Double>) -> Double {
+        guard let number = value as? NSNumber, CFGetTypeID(number) != CFBooleanGetTypeID() else { return defaultSize }
+        let size = number.doubleValue
+        guard size.isFinite else { return defaultSize }
+        return min(max(size.rounded(), range.lowerBound), range.upperBound)
+    }
+
     private struct InstalledFamily {
         let name: String
         let isMonospaced: Bool

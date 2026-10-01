@@ -20,6 +20,8 @@ struct DocumentViewModeContent: View {
             currentMatchIndex: documentManager.currentMatchIndex,
             mainFontID: settings.mainPreviewFontID,
             fixedFontID: settings.fixedPreviewFontID,
+            mainFontSize: CGFloat(settings.mainPreviewFontSize),
+            fixedFontSize: CGFloat(settings.fixedPreviewFontSize),
             theme: PreviewThemeCatalog.resolve(
                 lightID: settings.lightPreviewThemeID,
                 darkID: settings.darkPreviewThemeID,

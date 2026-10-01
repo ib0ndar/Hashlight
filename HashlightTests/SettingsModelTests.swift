@@ -157,6 +157,76 @@ nonisolated final class TabBarSettingTests: XCTestCase {
     }
 }
 
+nonisolated final class PreviewFontSizeSettingTests: XCTestCase {
+    @MainActor
+    func testSizesDefaultTo16And13AndWriteNothing() {
+        XCTAssertEqual(DefaultsKeys.mainPreviewFontSize, "mainPreviewFontSize")
+        XCTAssertEqual(DefaultsKeys.fixedPreviewFontSize, "fixedPreviewFontSize")
+        let scratch = ScratchDefaults()
+        let sizes = SettingsManager.loadPreviewFontSizes(from: scratch.defaults)
+        XCTAssertEqual(sizes.main, 16)
+        XCTAssertEqual(sizes.fixed, 13)
+        XCTAssertNil(scratch.defaults.object(forKey: DefaultsKeys.mainPreviewFontSize))
+        XCTAssertNil(scratch.defaults.object(forKey: DefaultsKeys.fixedPreviewFontSize))
+    }
+
+    @MainActor
+    func testSavedSizesAreRoundedAndClampedAndBadValuesFallBack() {
+        XCTAssertEqual(PreviewFontCatalog.mainSizeRange, 8...32)
+        XCTAssertEqual(PreviewFontCatalog.fixedSizeRange, 8...32)
+        let scratch = ScratchDefaults()
+        scratch.defaults.set(18.4, forKey: DefaultsKeys.mainPreviewFontSize)
+        scratch.defaults.set(40, forKey: DefaultsKeys.fixedPreviewFontSize)
+        var sizes = SettingsManager.loadPreviewFontSizes(from: scratch.defaults)
+        XCTAssertEqual(sizes.main, 18)
+        XCTAssertEqual(sizes.fixed, 32)
+
+        scratch.defaults.set(2, forKey: DefaultsKeys.mainPreviewFontSize)
+        scratch.defaults.set("big", forKey: DefaultsKeys.fixedPreviewFontSize)
+        sizes = SettingsManager.loadPreviewFontSizes(from: scratch.defaults)
+        XCTAssertEqual(sizes.main, 8)
+        XCTAssertEqual(sizes.fixed, 13, "a value of the wrong type falls back to the default")
+
+        scratch.defaults.set(true, forKey: DefaultsKeys.mainPreviewFontSize)
+        XCTAssertEqual(SettingsManager.loadPreviewFontSizes(from: scratch.defaults).main, 16)
+    }
+
+    /// A new SettingsManager reads the saved defaults, as the app does at launch.
+    @MainActor
+    func testSizesAndResetSurviveARestart() {
+        let settings = SettingsManager.shared
+        let previous = (settings.mainPreviewFontSize, settings.fixedPreviewFontSize)
+        let saved = (
+            UserDefaults.standard.object(forKey: DefaultsKeys.mainPreviewFontSize),
+            UserDefaults.standard.object(forKey: DefaultsKeys.fixedPreviewFontSize)
+        )
+        defer {
+            settings.mainPreviewFontSize = previous.0
+            settings.fixedPreviewFontSize = previous.1
+            UserDefaults.standard.set(saved.0, forKey: DefaultsKeys.mainPreviewFontSize)
+            UserDefaults.standard.set(saved.1, forKey: DefaultsKeys.fixedPreviewFontSize)
+        }
+
+        for (main, fixed) in [(8.0, 32.0), (32.0, 8.0), (19.0, 15.0)] {
+            settings.mainPreviewFontSize = main
+            settings.fixedPreviewFontSize = fixed
+            let restarted = SettingsManager()
+            XCTAssertEqual(restarted.mainPreviewFontSize, main)
+            XCTAssertEqual(restarted.fixedPreviewFontSize, fixed)
+            XCTAssertFalse(restarted.previewFontSizesAreDefault)
+        }
+
+        settings.resetPreviewFontSizes()
+        XCTAssertEqual(settings.mainPreviewFontSize, 16)
+        XCTAssertEqual(settings.fixedPreviewFontSize, 13)
+        XCTAssertTrue(settings.previewFontSizesAreDefault)
+        let restarted = SettingsManager()
+        XCTAssertEqual(restarted.mainPreviewFontSize, 16)
+        XCTAssertEqual(restarted.fixedPreviewFontSize, 13)
+        XCTAssertTrue(restarted.previewFontSizesAreDefault)
+    }
+}
+
 nonisolated final class SettingsPaneTests: XCTestCase {
     @MainActor
     func testThePaneKeyAndValuesAreStable() {

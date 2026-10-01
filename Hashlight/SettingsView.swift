@@ -152,6 +152,28 @@ struct GeneralSettingsPane: View {
 struct ViewingSettingsPane: View {
     @ObservedObject var settings: SettingsManager
 
+    private var mainSample: some View {
+        Text("Markdown text")
+            .font(PreviewFontCatalog.swiftUIFont(
+                id: settings.mainPreviewFontID,
+                size: settings.mainPreviewFontSize,
+                monospaced: false
+            ))
+            .foregroundStyle(.primary)
+            .fixedSize()
+    }
+
+    private var fixedSample: some View {
+        Text("code --help")
+            .font(PreviewFontCatalog.swiftUIFont(
+                id: settings.fixedPreviewFontID,
+                size: settings.fixedPreviewFontSize,
+                monospaced: true
+            ))
+            .foregroundStyle(.secondary)
+            .fixedSize()
+    }
+
     var body: some View {
         Form {
             Section("Theme") {
@@ -174,38 +196,70 @@ struct ViewingSettingsPane: View {
                 .pickerStyle(.menu)
             }
 
-            Section("Fonts") {
-                Picker("Main font", selection: $settings.mainPreviewFontID) {
-                    ForEach(PreviewFontCatalog.mainOptions) { option in
-                        Text(option.name).tag(option.id)
-                    }
-                }
-                .pickerStyle(.menu)
+            Section {
+                LabeledContent("Main font") {
+                    HStack(spacing: 12) {
+                        Picker("Main font", selection: $settings.mainPreviewFontID) {
+                            ForEach(PreviewFontCatalog.mainOptions) { option in
+                                Text(option.name).tag(option.id)
+                            }
+                        }
+                        .pickerStyle(.menu)
+                        .labelsHidden()
+                        .fixedSize()
 
-                Picker("Fixed font", selection: $settings.fixedPreviewFontID) {
-                    ForEach(PreviewFontCatalog.fixedOptions) { option in
-                        Text(option.name).tag(option.id)
+                        FontSizeStepper(
+                            title: "Main font size",
+                            help: "Body text size at 100 % zoom. Headings, tables, inline code, and labels scale with it.",
+                            size: $settings.mainPreviewFontSize,
+                            range: PreviewFontCatalog.mainSizeRange
+                        )
                     }
                 }
-                .pickerStyle(.menu)
+
+                LabeledContent("Fixed font") {
+                    HStack(spacing: 12) {
+                        Picker("Fixed font", selection: $settings.fixedPreviewFontID) {
+                            ForEach(PreviewFontCatalog.fixedOptions) { option in
+                                Text(option.name).tag(option.id)
+                            }
+                        }
+                        .pickerStyle(.menu)
+                        .labelsHidden()
+                        .fixedSize()
+
+                        FontSizeStepper(
+                            title: "Fixed font size",
+                            help: "Code block size at 100 % zoom; the frontmatter card's YAML scales with it.",
+                            size: $settings.fixedPreviewFontSize,
+                            range: PreviewFontCatalog.fixedSizeRange
+                        )
+                    }
+                }
 
                 LabeledContent("Sample") {
-                    HStack(spacing: 10) {
-                        Text("Markdown text")
-                            .font(PreviewFontCatalog.swiftUIFont(
-                                id: settings.mainPreviewFontID,
-                                size: 13,
-                                monospaced: false
-                            ))
-                            .foregroundStyle(.primary)
-                        Text("code --help")
-                            .font(PreviewFontCatalog.swiftUIFont(
-                                id: settings.fixedPreviewFontID,
-                                size: 12,
-                                monospaced: true
-                            ))
-                            .foregroundStyle(.secondary)
+                    // Side by side while both fit; at large sizes, one above the other.
+                    ViewThatFits(in: .horizontal) {
+                        HStack(alignment: .firstTextBaseline, spacing: 10) {
+                            mainSample
+                            fixedSample
+                        }
+                        VStack(alignment: .trailing, spacing: 4) {
+                            mainSample
+                            fixedSample
+                        }
                     }
+                }
+            } header: {
+                Text("Fonts")
+            } footer: {
+                HStack {
+                    Spacer()
+                    Button("Reset") {
+                        settings.resetPreviewFontSizes()
+                    }
+                    .disabled(settings.previewFontSizesAreDefault)
+                    .help("Set the main font back to \(Int(PreviewFontCatalog.defaultMainSize)) pt and the fixed font to \(Int(PreviewFontCatalog.defaultFixedSize)) pt.")
                 }
             }
 
@@ -245,6 +299,28 @@ struct ViewingSettingsPane: View {
             }
         }
         .formStyle(.grouped)
+    }
+}
+
+/// A font size in whole points: the value, then a stepper (one point per click, arrow keys when
+/// focused). The range keeps every value usable, so there is nothing to validate.
+private struct FontSizeStepper: View {
+    let title: String
+    let help: String
+    @Binding var size: Double
+    let range: ClosedRange<Double>
+
+    var body: some View {
+        HStack(spacing: 4) {
+            Text("\(Int(size)) pt")
+                .monospacedDigit()
+                .frame(minWidth: 40, alignment: .trailing)
+                .accessibilityHidden(true)
+            Stepper(title, value: $size, in: range, step: 1)
+                .labelsHidden()
+                .accessibilityValue("\(Int(size)) points")
+        }
+        .help(help)
     }
 }
 

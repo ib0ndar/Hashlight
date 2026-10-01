@@ -264,6 +264,36 @@ nonisolated final class PreviewPerformanceTests: XCTestCase {
     }
 
     @MainActor
+    func testFontSizeSettingsScaleMainAndFixedTextSeparately() throws {
+        let source = "# Title\n\nBody with `inline` code.\n\n```\nlet block = 1\n```\n"
+        let harness = NativePreviewHarness()
+        func size(of text: String) throws -> CGFloat {
+            let storage = try XCTUnwrap(harness.textView.textStorage)
+            let location = (storage.string as NSString).range(of: text).location
+            XCTAssertNotEqual(location, NSNotFound, text)
+            return try XCTUnwrap(storage.attribute(.font, at: location, effectiveRange: nil) as? NSFont).pointSize
+        }
+
+        harness.render(source)
+        XCTAssertEqual(try size(of: "Body"), 16, accuracy: 0.01)
+        XCTAssertEqual(try size(of: "Title"), 28, accuracy: 0.01)
+        XCTAssertEqual(try size(of: "inline"), 15, accuracy: 0.01, "inline code is a point below its text")
+        XCTAssertEqual(try size(of: "let block"), 13, accuracy: 0.01)
+
+        // Same document and content: the sizes are part of the style key, so nothing cached is reused.
+        harness.render(source, mainFontSize: 20)
+        XCTAssertEqual(try size(of: "Body"), 20, accuracy: 0.01)
+        XCTAssertEqual(try size(of: "Title"), 35, accuracy: 0.01, "headings keep their ratio to the body")
+        XCTAssertEqual(try size(of: "inline"), 18.75, accuracy: 0.01)
+        XCTAssertEqual(try size(of: "let block"), 13, accuracy: 0.01, "the main size leaves code blocks alone")
+
+        harness.render(source, mainFontSize: 20, fixedFontSize: 15.6)
+        XCTAssertEqual(try size(of: "Body"), 20, accuracy: 0.01)
+        XCTAssertEqual(try size(of: "let block"), 15.6, accuracy: 0.01)
+        XCTAssertEqual(try size(of: "inline"), 18.75, accuracy: 0.01, "inline code follows its text, not the code-block size")
+    }
+
+    @MainActor
     private func tableBlocks(_ harness: NativePreviewHarness) throws -> [NSTextTableBlock] {
         let storage = try XCTUnwrap(harness.textView.textStorage)
         var blocks: [NSTextTableBlock] = []
@@ -341,11 +371,18 @@ private final class NativePreviewHarness {
         coordinator.scrollView = scrollView
     }
 
-    func render(_ content: String, search: String = "", tableColumnConfiguration: MarkdownTableColumnConfiguration? = nil) {
+    func render(
+        _ content: String,
+        search: String = "",
+        tableColumnConfiguration: MarkdownTableColumnConfiguration? = nil,
+        mainFontSize: CGFloat = 16,
+        fixedFontSize: CGFloat = 13
+    ) {
         let parent = MarkdownTextView(content: content, baseURL: nil, documentId: documentId,
                                       scrollToHeadingId: .constant(nil), searchText: search, currentMatchIndex: 0,
                                       mainFontID: PreviewFontCatalog.systemMainID,
-                                      fixedFontID: PreviewFontCatalog.systemFixedID, theme: theme,
+                                      fixedFontID: PreviewFontCatalog.systemFixedID,
+                                      mainFontSize: mainFontSize, fixedFontSize: fixedFontSize, theme: theme,
                                       tableColumnConfiguration: tableColumnConfiguration)
         coordinator.scheduleRebuild(for: parent, textView: textView, scrollView: scrollView, contentChanged: false, isReload: false)
     }

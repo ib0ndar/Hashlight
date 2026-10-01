@@ -128,6 +128,8 @@ enum DefaultsKeys {
     static let legacyPreviewThemeID = "previewThemeID"
     static let mainPreviewFontID = "mainPreviewFontID"
     static let fixedPreviewFontID = "fixedPreviewFontID"
+    static let mainPreviewFontSize = "mainPreviewFontSize"
+    static let fixedPreviewFontSize = "fixedPreviewFontSize"
     /// Used only to migrate the former System / Serif / Monospace preview setting.
     static let legacyFontStyle = "fontStyle"
     static let contentAlignment = "contentAlignment"
@@ -197,6 +199,47 @@ class SettingsManager: ObservableObject {
         didSet {
             UserDefaults.standard.set(fixedPreviewFontID, forKey: DefaultsKeys.fixedPreviewFontID)
         }
+    }
+
+    /// Body text size at 100 % zoom; headings, tables, inline code, and labels scale with it.
+    @Published var mainPreviewFontSize: Double {
+        didSet {
+            UserDefaults.standard.set(mainPreviewFontSize, forKey: DefaultsKeys.mainPreviewFontSize)
+        }
+    }
+
+    /// Code-block size at 100 % zoom; YAML and code labels scale with it, inline code does not.
+    @Published var fixedPreviewFontSize: Double {
+        didSet {
+            UserDefaults.standard.set(fixedPreviewFontSize, forKey: DefaultsKeys.fixedPreviewFontSize)
+        }
+    }
+
+    /// The saved preview font sizes, validated; a missing or unusable value is the default.
+    static func loadPreviewFontSizes(from defaults: UserDefaults) -> (main: Double, fixed: Double) {
+        (
+            PreviewFontCatalog.validatedSize(
+                defaults.object(forKey: DefaultsKeys.mainPreviewFontSize),
+                default: PreviewFontCatalog.defaultMainSize,
+                range: PreviewFontCatalog.mainSizeRange
+            ),
+            PreviewFontCatalog.validatedSize(
+                defaults.object(forKey: DefaultsKeys.fixedPreviewFontSize),
+                default: PreviewFontCatalog.defaultFixedSize,
+                range: PreviewFontCatalog.fixedSizeRange
+            )
+        )
+    }
+
+    var previewFontSizesAreDefault: Bool {
+        mainPreviewFontSize == PreviewFontCatalog.defaultMainSize
+            && fixedPreviewFontSize == PreviewFontCatalog.defaultFixedSize
+    }
+
+    /// Settings → Viewing → Fonts → Reset. The defaults are saved like any other choice.
+    func resetPreviewFontSizes() {
+        mainPreviewFontSize = PreviewFontCatalog.defaultMainSize
+        fixedPreviewFontSize = PreviewFontCatalog.defaultFixedSize
     }
 
     /// Where the preview's fixed-width text column sits when the pane is wider than the column.
@@ -447,6 +490,9 @@ class SettingsManager: ObservableObject {
         self.fixedPreviewFontID = PreviewFontCatalog.validatedFixedID(
             UserDefaults.standard.string(forKey: DefaultsKeys.fixedPreviewFontID)
         )
+        let fontSizes = Self.loadPreviewFontSizes(from: .standard)
+        self.mainPreviewFontSize = fontSizes.main
+        self.fixedPreviewFontSize = fontSizes.fixed
 
         let savedAlignment = UserDefaults.standard.string(forKey: DefaultsKeys.contentAlignment) ?? ContentAlignment.left.rawValue
         self.contentAlignment = ContentAlignment(rawValue: savedAlignment) ?? .left
