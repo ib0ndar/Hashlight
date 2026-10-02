@@ -155,15 +155,7 @@ nonisolated final class PreviewPerformanceTests: XCTestCase {
     }
 
     @MainActor
-    func testKeywordMatchingKeepsBoundariesAndExistingColorPrecedence() {
-        let theme = PreviewTheme.system(dark: false)
-        let text = "let letter = \"let\" // let"
-        let result = SyntaxHighlighter.shared.highlight(code: text, language: "swift", font: .monospacedSystemFont(ofSize: 13, weight: .regular), theme: theme)
-        let nsText = text as NSString
-        for location in [0, nsText.range(of: "\"let\"").location + 1, nsText.length - 3] {
-            XCTAssertEqual(result.attribute(.foregroundColor, at: location, effectiveRange: nil) as? NSColor, theme.purpleColor)
-        }
-        XCTAssertEqual(result.attribute(.foregroundColor, at: nsText.range(of: "letter").location, effectiveRange: nil) as? NSColor, theme.textColor)
+    func testInlineLineBreakFastPathKeepsUnicode() {
         XCTAssertEqual(InlineMarkdown.tokenize("café<BR />日本語 `a<br>b`"), [.text("café"), .lineBreak, .text("日本語 "), .code("a<br>b")])
     }
 

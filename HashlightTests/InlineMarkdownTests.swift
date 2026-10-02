@@ -779,6 +779,45 @@ nonisolated final class PreviewBehaviorTests: XCTestCase {
     }
 
     @MainActor
+    func testCodeBlocksFollowTheSelectedThemeLive() throws {
+        let restore = preserveDocumentState()
+        let settings = SettingsManager.shared
+        let saved = (settings.lightPreviewThemeID, settings.darkPreviewThemeID)
+        // The test host shares the Debug app's defaults: put back exactly what was there.
+        let unset = [DefaultsKeys.lightPreviewThemeID, DefaultsKeys.darkPreviewThemeID]
+            .filter { UserDefaults.standard.object(forKey: $0) == nil }
+        defer {
+            (settings.lightPreviewThemeID, settings.darkPreviewThemeID) = saved
+            unset.forEach(UserDefaults.standard.removeObject(forKey:))
+            restore()
+        }
+        let url = FileManager.default.temporaryDirectory.appendingPathComponent("hashlight-code-theme-\(UUID().uuidString).md")
+        _ = show("# Code\n\n```swift\nlet greeting = \"hello\"\n```\n", at: url)
+
+        let harness = PreviewHarness()
+        let dark = harness.window.effectiveAppearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua
+        func stringColor() -> NSColor? {
+            guard let storage = harness.textView?.textStorage else { return nil }
+            let location = (storage.string as NSString).range(of: "\"hello\"").location
+            guard location != NSNotFound else { return nil }
+            return (storage.attribute(.foregroundColor, at: location, effectiveRange: nil) as? NSColor)?.usingColorSpace(.sRGB)
+        }
+        func expected(_ id: String) throws -> NSColor {
+            let theme = try XCTUnwrap(PreviewThemeCatalog.all.first { $0.id == id })
+            // highlight.js's Base16 template colours strings with base0B.
+            return try XCTUnwrap(theme.greenColor.usingColorSpace(.sRGB))
+        }
+
+        for (light, darkID) in [("github", "dracula"), ("solarized-light", "nord")] {
+            settings.lightPreviewThemeID = light
+            settings.darkPreviewThemeID = darkID
+            let want = try expected(dark ? darkID : light)
+            waitUntil("code takes \(dark ? darkID : light)'s colours", in: harness) { stringColor() == want }
+            XCTAssertEqual(stringColor(), want)
+        }
+    }
+
+    @MainActor
     func testClickingATaskCheckboxNeverChangesTheDocument() throws {
         let restore = preserveDocumentState()
         defer { restore() }
@@ -971,11 +1010,11 @@ nonisolated final class PreviewBehaviorTests: XCTestCase {
     }
 
     func testYAMLScalarsLoseMatchingQuotesOnly() {
-        XCTAssertEqual(MarkdownTextView.unquotedYAMLScalar("\"Rendering check\""), "Rendering check")
-        XCTAssertEqual(MarkdownTextView.unquotedYAMLScalar("'single'"), "single")
-        XCTAssertEqual(MarkdownTextView.unquotedYAMLScalar("  plain  "), "plain")
-        XCTAssertEqual(MarkdownTextView.unquotedYAMLScalar("\"mismatched'"), "\"mismatched'")
-        XCTAssertEqual(MarkdownTextView.unquotedYAMLScalar("\""), "\"")
+        XCTAssertEqual(PreviewRenderer.unquotedYAMLScalar("\"Rendering check\""), "Rendering check")
+        XCTAssertEqual(PreviewRenderer.unquotedYAMLScalar("'single'"), "single")
+        XCTAssertEqual(PreviewRenderer.unquotedYAMLScalar("  plain  "), "plain")
+        XCTAssertEqual(PreviewRenderer.unquotedYAMLScalar("\"mismatched'"), "\"mismatched'")
+        XCTAssertEqual(PreviewRenderer.unquotedYAMLScalar("\""), "\"")
     }
 
     @MainActor
@@ -1324,22 +1363,6 @@ nonisolated final class ReviewFixTests: XCTestCase {
         // The same bytes from a COMPLETE file genuinely are not UTF-8 → legacy fallback, not nil.
         XCTAssertNotNil(FolderSearch.decode(cut, truncated: false))
         XCTAssertNotEqual(FolderSearch.decode(cut, truncated: false), repaired)
-    }
-
-    // MARK: Quick Look truncation notice
-
-    func testTruncationNoticeIsHTMLInsideTheBodyNotMarkdownInsideAnOpenFence() {
-        // A file cut inside a fence: everything after the fence opener is code.
-        let html = QuickLookHTML.makeOfflineSafe(MarkdownParser.shared.toHTML("```\ncut mid-fence", includeStyles: true))
-        let noticed = QuickLookHTML.appendingTruncationNotice(to: html)
-        let noticeAt = try? XCTUnwrap(noticed.range(of: "Preview truncated"))
-        let bodyEnd = noticed.range(of: "</body>", options: .backwards)
-        let lastCodeEnd = noticed.range(of: "</pre>", options: .backwards) ?? noticed.range(of: "</code>", options: .backwards)
-        XCTAssertNotNil(noticeAt)
-        if let noticeAt, let bodyEnd { XCTAssertLessThan(noticeAt.lowerBound, bodyEnd.lowerBound) }
-        if let noticeAt, let lastCodeEnd {
-            XCTAssertGreaterThan(noticeAt.lowerBound, lastCodeEnd.lowerBound, "notice must sit OUTSIDE the code block")
-        }
     }
 
     // MARK: revealSearchHit

@@ -48,7 +48,19 @@ The main pieces, all in `Hashlight/`:
 - `InlineMarkdown.swift` — the shared inline tokenizer (bold/italic/code/
   links/images/strikethrough). All four render backends (preview, HTML,
   DOCX, print) route through it.
-- `MarkdownTextView.swift` — the NSTextView-based preview renderer.
+- `MarkdownTextView.swift` — the app's preview (a SwiftUI wrapper around the
+  text view): rebuilds, the element cache, find, scrolling, and loading
+  pictures, Mermaid diagrams, and math.
+- `PreviewRenderer.swift` — builds the preview's attributed text from the
+  parsed elements. The app and the Quick Look extension both use it.
+- `PreviewTextView.swift` — the preview's `NSTextView` and layout manager
+  (column placement, code and table cards, the copy button), also shared
+  with Quick Look.
+- `SyntaxHighlighter.swift` — code-block highlighting: the bundled
+  highlight.js (`Hashlight/HighlightJS/`, every language) run in
+  JavaScriptCore, its HTML turned into attributes, and its `default` /
+  `dark` / Base16 colours. Refresh the script with
+  `scripts/update-highlightjs.sh VERSION` and update `THIRD_PARTY_NOTICES.md`.
 - `ExportManager.swift` — PDF/HTML/RTF/DOCX export.
 - `SoftwareUpdate*.swift` — the in-app updater: reading GitHub releases and
   verifying downloads (`SoftwareUpdate`), installing and relaunching
@@ -63,7 +75,8 @@ Rendering and export must stay in sync:
    `MarkdownParser.parse()` (block-level) or a token in
    `InlineMarkdown.tokenize()` (inline).
 2. Add HTML conversion in `MarkdownParser.elementToHTML()`.
-3. Add preview rendering in `MarkdownTextView`'s `renderElement()` dispatch.
+3. Add preview rendering in `PreviewRenderer`'s `render(_:to:frontmatterExpanded:)`
+   dispatch; the app and Quick Look then both show it.
 4. Add DOCX/print handling in `ExportManager` / `PrintManager` if the
    element needs backend-specific output.
 5. Add a test in `HashlightTests/` covering the new syntax.

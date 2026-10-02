@@ -60,11 +60,11 @@
 		51AA00000000000000000012 /* SharedConstants.swift in Sources */ = {isa = PBXBuildFile; fileRef = 51AA00000000000000000001 /* SharedConstants.swift */; };
 		51AA00000000000000000013 /* MarkdownParser.swift in Sources */ = {isa = PBXBuildFile; fileRef = F1A2B3C4D5E6F7084 /* MarkdownParser.swift */; };
 		51AA00000000000000000014 /* InlineMarkdown.swift in Sources */ = {isa = PBXBuildFile; fileRef = E77A00000000000000000100 /* InlineMarkdown.swift */; };
-		51AA00000000000000000015 /* PreviewProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = 51AA00000000000000000002 /* PreviewProvider.swift */; };
-		51AA00000000000000000016 /* QuickLookHTML.swift in Sources */ = {isa = PBXBuildFile; fileRef = 51AA00000000000000000003 /* QuickLookHTML.swift */; };
+		51AA00000000000000000015 /* PreviewViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 51AA00000000000000000002 /* PreviewViewController.swift */; };
+		51AA00000000000000000016 /* QuickLookDocument.swift in Sources */ = {isa = PBXBuildFile; fileRef = 51AA00000000000000000003 /* QuickLookDocument.swift */; };
 		51AA00000000000000000017 /* HashlightQuickLook.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = 51AA00000000000000000006 /* HashlightQuickLook.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
-		51AA00000000000000000018 /* QuickLookHTML.swift in Sources */ = {isa = PBXBuildFile; fileRef = 51AA00000000000000000003 /* QuickLookHTML.swift */; };
-		51AA00000000000000000019 /* QuickLookHTMLTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 51AA00000000000000000007 /* QuickLookHTMLTests.swift */; };
+		51AA00000000000000000018 /* QuickLookDocument.swift in Sources */ = {isa = PBXBuildFile; fileRef = 51AA00000000000000000003 /* QuickLookDocument.swift */; };
+		51AA00000000000000000019 /* QuickLookPreviewTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 51AA00000000000000000007 /* QuickLookPreviewTests.swift */; };
 		710000000000000000000002 /* PreviewTheme.swift in Sources */ = {isa = PBXBuildFile; fileRef = 710000000000000000000001 /* PreviewTheme.swift */; };
 		710000000000000000000004 /* PreviewThemeTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 710000000000000000000003 /* PreviewThemeTests.swift */; };
 		710000000000000000000006 /* PreviewFont.swift in Sources */ = {isa = PBXBuildFile; fileRef = 710000000000000000000005 /* PreviewFont.swift */; };
@@ -73,6 +73,20 @@
 		770000000000000000000004 /* SoftwareUpdateInstaller.swift in Sources */ = {isa = PBXBuildFile; fileRef = 770000000000000000000003 /* SoftwareUpdateInstaller.swift */; };
 		770000000000000000000006 /* SoftwareUpdateController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 770000000000000000000005 /* SoftwareUpdateController.swift */; };
 		770000000000000000000008 /* SoftwareUpdateTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 770000000000000000000007 /* SoftwareUpdateTests.swift */; };
+		780000000000000000000011 /* PreviewRenderer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 780000000000000000000001 /* PreviewRenderer.swift */; };
+		780000000000000000000012 /* PreviewTextView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 780000000000000000000002 /* PreviewTextView.swift */; };
+		780000000000000000000013 /* PreviewLayoutOptions.swift in Sources */ = {isa = PBXBuildFile; fileRef = 780000000000000000000003 /* PreviewLayoutOptions.swift */; };
+		780000000000000000000021 /* PreviewRenderer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 780000000000000000000001 /* PreviewRenderer.swift */; };
+		780000000000000000000022 /* PreviewTextView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 780000000000000000000002 /* PreviewTextView.swift */; };
+		780000000000000000000023 /* PreviewLayoutOptions.swift in Sources */ = {isa = PBXBuildFile; fileRef = 780000000000000000000003 /* PreviewLayoutOptions.swift */; };
+		780000000000000000000024 /* PreviewTheme.swift in Sources */ = {isa = PBXBuildFile; fileRef = 710000000000000000000001 /* PreviewTheme.swift */; };
+		780000000000000000000025 /* PreviewFont.swift in Sources */ = {isa = PBXBuildFile; fileRef = 710000000000000000000005 /* PreviewFont.swift */; };
+		780000000000000000000026 /* SyntaxHighlighter.swift in Sources */ = {isa = PBXBuildFile; fileRef = F1A2B3C4D5E6F7088 /* SyntaxHighlighter.swift */; };
+		780000000000000000000031 /* PreviewViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 51AA00000000000000000002 /* PreviewViewController.swift */; };
+		790000000000000000000002 /* HighlightJS in Resources */ = {isa = PBXBuildFile; fileRef = 790000000000000000000001 /* HighlightJS */; };
+		790000000000000000000003 /* HighlightJS in Resources */ = {isa = PBXBuildFile; fileRef = 790000000000000000000001 /* HighlightJS */; };
+		790000000000000000000005 /* SyntaxHighlighterTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 790000000000000000000004 /* SyntaxHighlighterTests.swift */; };
+		790000000000000000000006 /* Resources in Resources */ = {isa = PBXBuildFile; fileRef = 74BFD9DFBCBC4E8593B2C133 /* Resources */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -163,17 +177,22 @@
 		6242B8DCAEB7EAC8A2896FC8 /* MarkdownParserTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MarkdownParserTests.swift; sourceTree = "<group>"; };
 		E77A00000000000000000203 /* HashlightTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = HashlightTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		51AA00000000000000000001 /* SharedConstants.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SharedConstants.swift; sourceTree = "<group>"; };
-		51AA00000000000000000002 /* PreviewProvider.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PreviewProvider.swift; sourceTree = "<group>"; };
-		51AA00000000000000000003 /* QuickLookHTML.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QuickLookHTML.swift; sourceTree = "<group>"; };
+		51AA00000000000000000002 /* PreviewViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PreviewViewController.swift; sourceTree = "<group>"; };
+		51AA00000000000000000003 /* QuickLookDocument.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QuickLookDocument.swift; sourceTree = "<group>"; };
 		51AA00000000000000000004 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 		51AA00000000000000000005 /* HashlightQuickLook.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = HashlightQuickLook.entitlements; sourceTree = "<group>"; };
 		51AA00000000000000000006 /* HashlightQuickLook.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = HashlightQuickLook.appex; sourceTree = BUILT_PRODUCTS_DIR; };
-		51AA00000000000000000007 /* QuickLookHTMLTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QuickLookHTMLTests.swift; sourceTree = "<group>"; };
+		51AA00000000000000000007 /* QuickLookPreviewTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QuickLookPreviewTests.swift; sourceTree = "<group>"; };
 		710000000000000000000001 /* PreviewTheme.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PreviewTheme.swift; sourceTree = "<group>"; };
 		710000000000000000000003 /* PreviewThemeTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PreviewThemeTests.swift; sourceTree = "<group>"; };
 		710000000000000000000005 /* PreviewFont.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PreviewFont.swift; sourceTree = "<group>"; };
 		710000000000000000000007 /* PreviewFontTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PreviewFontTests.swift; sourceTree = "<group>"; };
 		74BFD9DFBCBC4E8593B2C133 /* Resources */ = {isa = PBXFileReference; lastKnownFileType = folder; path = Resources; sourceTree = "<group>"; };
+		780000000000000000000001 /* PreviewRenderer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PreviewRenderer.swift; sourceTree = "<group>"; };
+		780000000000000000000002 /* PreviewTextView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PreviewTextView.swift; sourceTree = "<group>"; };
+		780000000000000000000003 /* PreviewLayoutOptions.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PreviewLayoutOptions.swift; sourceTree = "<group>"; };
+		790000000000000000000001 /* HighlightJS */ = {isa = PBXFileReference; lastKnownFileType = folder; path = HighlightJS; sourceTree = "<group>"; };
+		790000000000000000000004 /* SyntaxHighlighterTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SyntaxHighlighterTests.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -241,6 +260,9 @@
 				E77A00000000000000000100 /* InlineMarkdown.swift */,
 				51AA00000000000000000001 /* SharedConstants.swift */,
 				F1A2B3C4D5E6F7086 /* MarkdownTextView.swift */,
+				780000000000000000000001 /* PreviewRenderer.swift */,
+				780000000000000000000002 /* PreviewTextView.swift */,
+				780000000000000000000003 /* PreviewLayoutOptions.swift */,
 				F1A2B3C4D5E6F7088 /* SyntaxHighlighter.swift */,
 				F1A2B3C4D5E6F708A /* QuickOpenView.swift */,
 				F1A2B3C4D5E6F70801020304 /* FuzzyMatcher.swift */,
@@ -262,6 +284,7 @@
 				A1B2C3D4E5F6078901234567 /* StatusBarView.swift */,
 				98515A5CFBA7411D8B33B552 /* SettingsView.swift */,
 				74BFD9DFBCBC4E8593B2C133 /* Resources */,
+				790000000000000000000001 /* HighlightJS */,
 				B1C2D3E4F5A6B70801020305 /* DirectoryWatcher.swift */,
 				B1C2D3E4F5A6B70801020306 /* FolderManager.swift */,
 				B1C2D3E4F5A6B70801020307 /* FolderSidebarView.swift */,
@@ -285,13 +308,14 @@ A1111111 /* Hashlight.app */,
 			children = (
 				E77A00000000000000000201 /* InlineMarkdownTests.swift */,
 				6242B8DCAEB7EAC8A2896FC8 /* MarkdownParserTests.swift */,
-				51AA00000000000000000007 /* QuickLookHTMLTests.swift */,
+				51AA00000000000000000007 /* QuickLookPreviewTests.swift */,
 				710000000000000000000003 /* PreviewThemeTests.swift */,
 				710000000000000000000007 /* PreviewFontTests.swift */,
 				7300000000000000000000A7 /* DockIconTests.swift */,
 				7400000000000000000000A7 /* SettingsModelTests.swift */,
 				760000000000000000000003 /* PreviewPerformanceTests.swift */,
 				770000000000000000000007 /* SoftwareUpdateTests.swift */,
+				790000000000000000000004 /* SyntaxHighlighterTests.swift */,
 			);
 			path = HashlightTests;
 			sourceTree = "<group>";
@@ -299,8 +323,8 @@ A1111111 /* Hashlight.app */,
 		51AA00000000000000000020 /* HashlightQuickLook */ = {
 			isa = PBXGroup;
 			children = (
-				51AA00000000000000000002 /* PreviewProvider.swift */,
-				51AA00000000000000000003 /* QuickLookHTML.swift */,
+				51AA00000000000000000002 /* PreviewViewController.swift */,
+				51AA00000000000000000003 /* QuickLookDocument.swift */,
 				51AA00000000000000000004 /* Info.plist */,
 				51AA00000000000000000005 /* HashlightQuickLook.entitlements */,
 			);
@@ -417,6 +441,7 @@ A1111111 /* Hashlight.app */,
 				7400000000000000000000A6 /* Credits.rtf in Resources */,
 			
 				2208643A1E114A2C9A4C7331 /* Resources in Resources */,
+				790000000000000000000002 /* HighlightJS in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -424,6 +449,8 @@ A1111111 /* Hashlight.app */,
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				790000000000000000000003 /* HighlightJS in Resources */,
+				790000000000000000000006 /* Resources in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -458,6 +485,9 @@ A1111111 /* Hashlight.app */,
 				E77A00000000000000000101 /* InlineMarkdown.swift in Sources */,
 				51AA00000000000000000011 /* SharedConstants.swift in Sources */,
 				F1A2B3C4D5E6F7087 /* MarkdownTextView.swift in Sources */,
+				780000000000000000000011 /* PreviewRenderer.swift in Sources */,
+				780000000000000000000012 /* PreviewTextView.swift in Sources */,
+				780000000000000000000013 /* PreviewLayoutOptions.swift in Sources */,
 				F1A2B3C4D5E6F7089 /* SyntaxHighlighter.swift in Sources */,
 				F1A2B3C4D5E6F708B /* QuickOpenView.swift in Sources */,
 				A1B2C3D4E5F6A70801020304 /* FuzzyMatcher.swift in Sources */,
@@ -488,14 +518,16 @@ A1111111 /* Hashlight.app */,
 			files = (
 				E77A00000000000000000202 /* InlineMarkdownTests.swift in Sources */,
 				84B9A8D6DB385775F9778A9E /* MarkdownParserTests.swift in Sources */,
-				51AA00000000000000000018 /* QuickLookHTML.swift in Sources */,
-				51AA00000000000000000019 /* QuickLookHTMLTests.swift in Sources */,
+				51AA00000000000000000018 /* QuickLookDocument.swift in Sources */,
+				780000000000000000000031 /* PreviewViewController.swift in Sources */,
+				51AA00000000000000000019 /* QuickLookPreviewTests.swift in Sources */,
 				710000000000000000000004 /* PreviewThemeTests.swift in Sources */,
 				710000000000000000000008 /* PreviewFontTests.swift in Sources */,
 				7300000000000000000000A8 /* DockIconTests.swift in Sources */,
 				7400000000000000000000A8 /* SettingsModelTests.swift in Sources */,
 				760000000000000000000004 /* PreviewPerformanceTests.swift in Sources */,
 				770000000000000000000008 /* SoftwareUpdateTests.swift in Sources */,
+				790000000000000000000005 /* SyntaxHighlighterTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -503,11 +535,17 @@ A1111111 /* Hashlight.app */,
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				51AA00000000000000000015 /* PreviewProvider.swift in Sources */,
-				51AA00000000000000000016 /* QuickLookHTML.swift in Sources */,
+				51AA00000000000000000015 /* PreviewViewController.swift in Sources */,
+				51AA00000000000000000016 /* QuickLookDocument.swift in Sources */,
 				51AA00000000000000000013 /* MarkdownParser.swift in Sources */,
 				51AA00000000000000000014 /* InlineMarkdown.swift in Sources */,
 				51AA00000000000000000012 /* SharedConstants.swift in Sources */,
+				780000000000000000000021 /* PreviewRenderer.swift in Sources */,
+				780000000000000000000022 /* PreviewTextView.swift in Sources */,
+				780000000000000000000023 /* PreviewLayoutOptions.swift in Sources */,
+				780000000000000000000024 /* PreviewTheme.swift in Sources */,
+				780000000000000000000025 /* PreviewFont.swift in Sources */,
+				780000000000000000000026 /* SyntaxHighlighter.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -749,6 +787,7 @@ A1111111 /* Hashlight.app */,
 				MACOSX_DEPLOYMENT_TARGET = 14.0;
 				PRODUCT_BUNDLE_IDENTIFIER = io.github.ib0ndar.hashlight.debug.tests;
 				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "$(inherited) HASHLIGHT_QUICKLOOK_TESTS";
 				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
 				SWIFT_STRICT_CONCURRENCY = complete;
 				SWIFT_VERSION = 6.0;
@@ -772,6 +811,7 @@ A1111111 /* Hashlight.app */,
 				MACOSX_DEPLOYMENT_TARGET = 14.0;
 				PRODUCT_BUNDLE_IDENTIFIER = io.github.ib0ndar.hashlight.tests;
 				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "$(inherited) HASHLIGHT_QUICKLOOK_TESTS";
 				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
 				SWIFT_STRICT_CONCURRENCY = complete;
 				SWIFT_VERSION = 6.0;

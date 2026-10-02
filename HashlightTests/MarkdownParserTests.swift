@@ -119,25 +119,15 @@ nonisolated final class MarkdownParserTests: XCTestCase {
     }
 
     @MainActor
-    func testTableColumnSettingsOnlyAffectHTMLWhenExplicitlySupplied() {
+    func testExportedHTMLTablesIgnoreTheColumnCategories() {
         let markdown = """
         | Status | Purpose | VLAN |
         | --- | --- | --- |
         | Up | Keep the link available | 123 |
         """
-        let parser = MarkdownParser.shared
-        let exportedHTML = parser.toHTML(markdown, includeStyles: false)
-        XCTAssertFalse(exportedHTML.contains("hashlight-markdown-table"))
+        let exportedHTML = MarkdownParser.shared.toHTML(markdown, includeStyles: false)
+        XCTAssertTrue(exportedHTML.contains("<table>\n<tr><th>Status</th>"))
         XCTAssertFalse(exportedHTML.contains("<colgroup>"))
-
-        let quickLookHTML = parser.toHTML(
-            markdown,
-            includeStyles: false,
-            tableColumnConfiguration: .defaults
-        )
-        XCTAssertTrue(quickLookHTML.contains(#"<table class="hashlight-markdown-table">"#))
-        XCTAssertTrue(quickLookHTML.contains(#"<colgroup><col style="width:"#))
-        XCTAssertTrue(quickLookHTML.contains("</colgroup>"))
     }
 
     // MARK: - 4. Fenced code blocks

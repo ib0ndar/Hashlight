@@ -186,6 +186,7 @@ class SettingsManager: ObservableObject {
     @Published var lightPreviewThemeID: String {
         didSet {
             UserDefaults.standard.set(lightPreviewThemeID, forKey: DefaultsKeys.lightPreviewThemeID)
+            mirrorViewingSettingsToQuickLook()
         }
     }
 
@@ -193,18 +194,21 @@ class SettingsManager: ObservableObject {
     @Published var darkPreviewThemeID: String {
         didSet {
             UserDefaults.standard.set(darkPreviewThemeID, forKey: DefaultsKeys.darkPreviewThemeID)
+            mirrorViewingSettingsToQuickLook()
         }
     }
 
     @Published var mainPreviewFontID: String {
         didSet {
             UserDefaults.standard.set(mainPreviewFontID, forKey: DefaultsKeys.mainPreviewFontID)
+            mirrorViewingSettingsToQuickLook()
         }
     }
 
     @Published var fixedPreviewFontID: String {
         didSet {
             UserDefaults.standard.set(fixedPreviewFontID, forKey: DefaultsKeys.fixedPreviewFontID)
+            mirrorViewingSettingsToQuickLook()
         }
     }
 
@@ -212,6 +216,7 @@ class SettingsManager: ObservableObject {
     @Published var mainPreviewFontSize: Double {
         didSet {
             UserDefaults.standard.set(mainPreviewFontSize, forKey: DefaultsKeys.mainPreviewFontSize)
+            mirrorViewingSettingsToQuickLook()
         }
     }
 
@@ -219,6 +224,7 @@ class SettingsManager: ObservableObject {
     @Published var fixedPreviewFontSize: Double {
         didSet {
             UserDefaults.standard.set(fixedPreviewFontSize, forKey: DefaultsKeys.fixedPreviewFontSize)
+            mirrorViewingSettingsToQuickLook()
         }
     }
 
@@ -236,6 +242,23 @@ class SettingsManager: ObservableObject {
                 range: PreviewFontCatalog.fixedSizeRange
             )
         )
+    }
+
+    /// Quick Look follows the themes and fonts (not the layout, zoom, or frontmatter setting);
+    /// it reads them from the shared preferences domain.
+    var quickLookViewingSettings: QuickLookViewingSettings {
+        QuickLookViewingSettings(
+            lightThemeID: lightPreviewThemeID,
+            darkThemeID: darkPreviewThemeID,
+            mainFontID: mainPreviewFontID,
+            fixedFontID: fixedPreviewFontID,
+            mainFontSize: mainPreviewFontSize,
+            fixedFontSize: fixedPreviewFontSize
+        )
+    }
+
+    private func mirrorViewingSettingsToQuickLook() {
+        QuickLookViewingPreferences.persist(quickLookViewingSettings)
     }
 
     var previewFontSizesAreDefault: Bool {
@@ -294,7 +317,7 @@ class SettingsManager: ObservableObject {
     }
 
     /// Whether the table column categories size columns. Off by default: columns are sized to
-    /// their content, and Quick Look leaves tables to the browser's own layout.
+    /// their content, in the app and in Quick Look.
     @Published var tableColumnWeightsEnabled: Bool {
         didSet { MarkdownTableColumnPreferences.persistEnabled(tableColumnWeightsEnabled) }
     }
@@ -363,56 +386,11 @@ class SettingsManager: ObservableObject {
         }
     }
 
-    /// Horizontal placement of the preview's text column. This positions the whole column
-    /// within the pane — text inside the column stays left-aligned (it is not paragraph
-    /// alignment). Only visible when the pane is wider than the column plus its margins;
-    /// in narrow panes and Focus Mode all three settings look the same.
-    enum ContentAlignment: String, CaseIterable {
-        case left = "Left"
-        case center = "Center"
-        case right = "Right"
-
-        var displayName: String {
-            return self.rawValue
-        }
-
-        var icon: String {
-            switch self {
-            case .left: return "text.alignleft"
-            case .center: return "text.aligncenter"
-            case .right: return "text.alignright"
-            }
-        }
-    }
-
-    /// Maximum width of the preview's text column. A MAXIMUM, not a fixed size: the column
-    /// always shrinks to fit a narrower pane (Focus Mode, a small window). `.full` tracks the pane.
-    enum ContentWidth: String, CaseIterable {
-        case narrow = "Narrow"
-        case medium = "Medium"
-        case wide = "Wide"
-        case full = "Full"
-
-        var displayName: String {
-            return self.rawValue
-        }
-
-        /// Column width in points; nil = fill the pane without a maximum.
-        var points: CGFloat? {
-            switch self {
-            case .narrow: return 760
-            case .medium: return 960
-            case .wide: return 1300
-            case .full: return nil
-            }
-        }
-
-        /// Preset cap for images and diagrams, which are sized once at build time. Full has
-        /// no artificial cap, matching the text column's fill-the-pane behavior.
-        var attachmentMaxWidth: CGFloat? {
-            points.map { max(200, $0 - 100) }
-        }
-    }
+    /// The preview's layout settings, defined in `PreviewLayoutOptions.swift` (shared with the
+    /// Quick Look extension).
+    typealias ContentAlignment = PreviewContentAlignment
+    typealias ContentWidth = PreviewContentWidth
+    typealias PageMargin = PreviewPageMargin
 
     /// System leaves the icon to macOS (on macOS 13–15: Frost in Light mode, Ember in Dark mode);
     /// Frost and Ember override it.
@@ -423,20 +401,6 @@ class SettingsManager: ObservableObject {
 
         var displayName: String {
             return self.rawValue
-        }
-    }
-
-    enum PageMargin: String, CaseIterable {
-        case compact = "Compact"
-        case normal = "Normal"
-        case comfortable = "Comfortable"
-
-        var points: CGFloat {
-            switch self {
-            case .compact: return 16
-            case .normal: return 24
-            case .comfortable: return 40
-            }
         }
     }
 
@@ -556,6 +520,7 @@ class SettingsManager: ObservableObject {
         // aligned with the app's saved settings on subsequent launches.
         MarkdownTableColumnPreferences.persist(tableColumnConfiguration)
         MarkdownTableColumnPreferences.persistEnabled(tableColumnWeightsEnabled)
+        mirrorViewingSettingsToQuickLook()
 
         // Observe NSApplication.effectiveAppearance so views observing SettingsManager re-render
         // on system theme toggle. SettingsManager.shared can be touched during HashlightApp.init —

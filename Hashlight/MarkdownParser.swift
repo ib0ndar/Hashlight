@@ -577,11 +577,7 @@ nonisolated final class MarkdownParser: Sendable {
     // MARK: - HTML Conversion
 
     /// Convert markdown to full HTML document with styles
-    func toHTML(
-        _ markdown: String,
-        includeStyles: Bool = true,
-        tableColumnConfiguration: MarkdownTableColumnConfiguration? = nil
-    ) -> String {
+    func toHTML(_ markdown: String, includeStyles: Bool = true) -> String {
         let elements = parse(markdown)
         let hasMermaid = elements.contains(where: { if case .mermaidBlock = $0 { return true } else { return false } })
         let hasMath = elements.contains(where: { if case .displayMath = $0 { return true } else { return false } })
@@ -755,27 +751,18 @@ nonisolated final class MarkdownParser: Sendable {
         <body>
         """
 
-        html += toHTMLBody(markdown, tableColumnConfiguration: tableColumnConfiguration)
+        html += toHTMLBody(markdown)
         html += "\n</body>\n</html>"
 
         return html
     }
 
     /// Convert markdown to HTML body content only (no wrapper)
-    func toHTMLBody(
-        _ markdown: String,
-        tableColumnConfiguration: MarkdownTableColumnConfiguration? = nil
-    ) -> String {
-        let elements = parse(markdown)
-        return elements.map {
-            elementToHTML($0, tableColumnConfiguration: tableColumnConfiguration)
-        }.joined()
+    func toHTMLBody(_ markdown: String) -> String {
+        parse(markdown).map { elementToHTML($0) }.joined()
     }
 
-    private func elementToHTML(
-        _ element: Element,
-        tableColumnConfiguration: MarkdownTableColumnConfiguration? = nil
-    ) -> String {
+    private func elementToHTML(_ element: Element) -> String {
         switch element {
         case .heading1(let text):
             return "<h1>\(formatInlineHTML(text))</h1>\n"
@@ -848,24 +835,7 @@ nonisolated final class MarkdownParser: Sendable {
             return "<div class=\"math-display\"><script type=\"math/tex; mode=display\">\(safeLatex)</script></div>\n"
         case .table(let rows, let alignments):
             let columnCount = rows.map(\.count).max() ?? 0
-            let tableClass = tableColumnConfiguration == nil ? "" : " class=\"hashlight-markdown-table\""
-            var html = "<table\(tableClass)>\n"
-            if let tableColumnConfiguration, columnCount > 0 {
-                let widths = MarkdownTableColumnLayout.widthPercentages(
-                    for: rows,
-                    configuration: tableColumnConfiguration
-                )
-                html += "<colgroup>"
-                for width in widths {
-                    let percentage = String(
-                        format: "%.4f",
-                        locale: Locale(identifier: "en_US_POSIX"),
-                        Double(width)
-                    )
-                    html += "<col style=\"width:\(percentage)%\">"
-                }
-                html += "</colgroup>\n"
-            }
+            var html = "<table>\n"
             for (rowIndex, row) in rows.enumerated() {
                 html += "<tr>"
                 let tag = rowIndex == 0 ? "th" : "td"

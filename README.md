@@ -59,7 +59,7 @@ Open .md --> Rendered document (reloads when the file changes) --> Export PDF/HT
 ### Rendering
 - **Reading typography** — styled headings with rules, comfortable line height, no raw Markdown syntax on screen
 - **Emphasis via asterisks** — `*italic*` / `**bold**`; underscore emphasis (`_text_`) is not supported by design
-- **Syntax highlighting** for Swift, Python, JavaScript, TypeScript, C/C++, Bash, SQL, JSON, HTML, XML, YAML
+- **Syntax highlighting** by [highlight.js](https://highlightjs.org) for all of its 190+ languages (name the language after the opening fence), in highlight.js's own colours, bundled and offline
 - **Mermaid diagrams** — flowcharts, sequence diagrams, class diagrams rendered inline
 - **LaTeX math** — inline `$...$` and block `$$...$$` via KaTeX
 - **Tables** — GitHub-flavored markdown tables with column alignment; columns sized to their content (long columns share the space in wide tables), or optionally by header category (configurable categories, matching words, priorities, and width weights; off by default)
@@ -81,7 +81,7 @@ Open .md --> Rendered document (reloads when the file changes) --> Export PDF/HT
 - **Command palette** (`⌘K`) — every app action, searchable
 - **Find in document** (`⌘F`) — the toolbar's search field searches the rendered text, with match highlighting, a match counter, and next/previous navigation (`Return`, `⌘G`, `⌘⇧G`)
 - **Search in folder** (`⌃⇧F`, or type `>` in the quick switcher) — search file contents across the open folder; Enter opens the file on that exact match
-- **Quick Look** — press Space on a `.md` file in Finder for a rendered preview
+- **Quick Look** — press Space on a `.md` file in Finder for a preview drawn by the app's own renderer, in your themes and fonts
 - **Reading position memory** — automatically remembers scroll position per document
 
 ### Export & Print
@@ -124,7 +124,7 @@ Open .md --> Rendered document (reloads when the file changes) --> Export PDF/HT
 | **UI** | SwiftUI + AppKit interop |
 | **Text engine** | `NSTextView` (Apple's native text system, not a web view) |
 | **Parser** | Custom line-based markdown parser (single source of truth for the window and every export) |
-| **Syntax highlighting** | Regex-based, ~10 language grammars |
+| **Syntax highlighting** | highlight.js 11.12 (bundled, every language) in JavaScriptCore |
 | **Diagrams / Math** | Headless `WKWebView` with Mermaid + KaTeX CDN scripts |
 | **File watching** | `DispatchSourceFileSystemObject` + `FSEventStream` for directories |
 | **Persistence** | `UserDefaults` + security-scoped bookmark data |

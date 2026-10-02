@@ -167,8 +167,8 @@ nonisolated enum MarkdownTableColumnPreferences {
 #endif
     static let sharedKey = "configuration-v1"
     static let appKey = "markdownTableColumnConfiguration.v1"
-    /// Whether the categories size columns at all. Off (or absent) sizes columns to their content
-    /// in the app and leaves Quick Look tables to the browser's own layout.
+    /// Whether the categories size columns at all. Off (or absent) sizes columns to their
+    /// content, in the app and in Quick Look.
     static let sharedEnabledKey = "weights-enabled"
     static let appEnabledKey = "markdownTableColumnWeightsEnabled"
 
@@ -225,7 +225,78 @@ nonisolated enum MarkdownTableColumnPreferences {
     }
 }
 
-/// Header token matching and width allocation shared by AppKit and Quick Look HTML.
+/// The app's Settings → Viewing choices Quick Look follows: the light and dark themes and the
+/// main and fixed fonts with their sizes. The app mirrors them into the shared preferences
+/// domain the extension can read (the one holding the table settings), whenever one changes and
+/// at every launch. Values are raw here; the extension validates them as the app does.
+nonisolated struct QuickLookViewingSettings: Equatable, Sendable {
+    var lightThemeID: String?
+    var darkThemeID: String?
+    var mainFontID: String?
+    var fixedFontID: String?
+    var mainFontSize: Double?
+    var fixedFontSize: Double?
+}
+
+nonisolated enum QuickLookViewingPreferences {
+    static var sharedDomain: String { MarkdownTableColumnPreferences.sharedDomain }
+    static let lightThemeKey = "light-theme-id"
+    static let darkThemeKey = "dark-theme-id"
+    static let mainFontKey = "main-font-id"
+    static let fixedFontKey = "fixed-font-id"
+    static let mainFontSizeKey = "main-font-size"
+    static let fixedFontSizeKey = "fixed-font-size"
+
+    static func persist(
+        _ settings: QuickLookViewingSettings,
+        sharedPreferences: UserDefaults? = UserDefaults(suiteName: sharedDomain)
+    ) {
+        guard let sharedPreferences else { return }
+        let values: [(String, Any?)] = [
+            (lightThemeKey, settings.lightThemeID),
+            (darkThemeKey, settings.darkThemeID),
+            (mainFontKey, settings.mainFontID),
+            (fixedFontKey, settings.fixedFontID),
+            (mainFontSizeKey, settings.mainFontSize),
+            (fixedFontSizeKey, settings.fixedFontSize)
+        ]
+        for (key, value) in values {
+            if let value {
+                sharedPreferences.set(value, forKey: key)
+            } else {
+                sharedPreferences.removeObject(forKey: key)
+            }
+        }
+        _ = sharedPreferences.synchronize()
+    }
+
+    /// The choices as last mirrored; a missing value or one of the wrong type is nil.
+    static func load(from sharedPreferences: UserDefaults?) -> QuickLookViewingSettings {
+        func size(_ key: String) -> Double? {
+            guard let number = sharedPreferences?.object(forKey: key) as? NSNumber,
+                  CFGetTypeID(number) != CFBooleanGetTypeID() else { return nil }
+            return number.doubleValue
+        }
+        return QuickLookViewingSettings(
+            lightThemeID: sharedPreferences?.object(forKey: lightThemeKey) as? String,
+            darkThemeID: sharedPreferences?.object(forKey: darkThemeKey) as? String,
+            mainFontID: sharedPreferences?.object(forKey: mainFontKey) as? String,
+            fixedFontID: sharedPreferences?.object(forKey: fixedFontKey) as? String,
+            mainFontSize: size(mainFontSizeKey),
+            fixedFontSize: size(fixedFontSizeKey)
+        )
+    }
+
+    /// What Quick Look reads for each preview.
+    static func loadQuickLookDefaults() -> QuickLookViewingSettings {
+        let sharedPreferences = UserDefaults(suiteName: sharedDomain)
+        // Quick Look may reuse the extension process after Hashlight has written newer values.
+        _ = sharedPreferences?.synchronize()
+        return load(from: sharedPreferences)
+    }
+}
+
+/// Header token matching and width allocation for preview tables, in the app and Quick Look.
 nonisolated enum MarkdownTableColumnLayout {
     static func tokens(in text: String) -> Set<String> {
         Set(text
