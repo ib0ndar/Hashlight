@@ -11,7 +11,7 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/version-1.2.0-f5a524?style=flat-square" alt="Version 1.2.0" />
+  <img src="https://img.shields.io/badge/version-1.3.0-f5a524?style=flat-square" alt="Version 1.3.0" />
   <img src="https://img.shields.io/badge/platform-macOS_13%2B-4a9eff?style=flat-square" alt="macOS 13+" />
   <img src="https://img.shields.io/badge/stack-SwiftUI%20%7C%20AppKit%20%7C%20NSTextView-34d399?style=flat-square" alt="Stack" />
   <a href="https://github.com/ib0ndar/Hashlight/actions/workflows/ci.yml"><img src="https://github.com/ib0ndar/Hashlight/actions/workflows/ci.yml/badge.svg?branch=main" alt="CI" /></a>
