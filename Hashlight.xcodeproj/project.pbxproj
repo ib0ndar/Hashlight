@@ -14,7 +14,6 @@
 		F60000000000000000000013 /* WelcomeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F60000000000000000000012 /* WelcomeView.swift */; };
 		F60000000000000000000019 /* EmptyDocumentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F60000000000000000000018 /* EmptyDocumentView.swift */; };
 		F6000000000000000000001B /* NormalContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F6000000000000000000001A /* NormalContentView.swift */; };
-		F6000000000000000000001D /* FocusModeContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F6000000000000000000001C /* FocusModeContentView.swift */; };
 		F60000000000000000000021 /* DocumentViewModeContent.swift in Sources */ = {isa = PBXBuildFile; fileRef = F60000000000000000000020 /* DocumentViewModeContent.swift */; };
 		BD22D32F63AA4915B6E3390D /* HelpView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C007183B47884CF6A423E3DE /* HelpView.swift */; };
 		2208643A1E114A2C9A4C7331 /* Resources in Resources */ = {isa = PBXBuildFile; fileRef = 74BFD9DFBCBC4E8593B2C133 /* Resources */; };
@@ -132,7 +131,6 @@
 		F60000000000000000000012 /* WelcomeView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WelcomeView.swift; sourceTree = "<group>"; };
 		F60000000000000000000018 /* EmptyDocumentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EmptyDocumentView.swift; sourceTree = "<group>"; };
 		F6000000000000000000001A /* NormalContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NormalContentView.swift; sourceTree = "<group>"; };
-		F6000000000000000000001C /* FocusModeContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FocusModeContentView.swift; sourceTree = "<group>"; };
 		F60000000000000000000020 /* DocumentViewModeContent.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DocumentViewModeContent.swift; sourceTree = "<group>"; };
 		C007183B47884CF6A423E3DE /* HelpView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HelpView.swift; sourceTree = "<group>"; };
 		7B3F07EF007F429AB9E72113 /* SettingsManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsManager.swift; sourceTree = "<group>"; };
@@ -241,7 +239,6 @@
 				7400000000000000000000A1 /* NavigatorSidebar.swift */,
 				7400000000000000000000A3 /* ViewerToolbar.swift */,
 				7400000000000000000000A9 /* StatusBarAccessory.swift */,
-				F6000000000000000000001C /* FocusModeContentView.swift */,
 				F60000000000000000000020 /* DocumentViewModeContent.swift */,
 				A10000000 /* HashlightApp.swift */,
 				A10000002 /* ContentView.swift */,
@@ -466,7 +463,6 @@ A1111111 /* Hashlight.app */,
 				F60000000000000000000013 /* WelcomeView.swift in Sources */,
 				F60000000000000000000019 /* EmptyDocumentView.swift in Sources */,
 				F6000000000000000000001B /* NormalContentView.swift in Sources */,
-				F6000000000000000000001D /* FocusModeContentView.swift in Sources */,
 				F60000000000000000000021 /* DocumentViewModeContent.swift in Sources */,
 				BD22D32F63AA4915B6E3390D /* HelpView.swift in Sources */,
 				A10000001 /* HashlightApp.swift in Sources */,

@@ -100,7 +100,7 @@ Open .md --> Rendered document (reloads when the file changes) --> Export PDF/HT
 - **Drag-and-drop** — drop `.md` files onto the window to open
 
 ### UX Polish
-- **Focus mode** (`⌘⇧F`) — hides the sidebar, toolbar items, tabs, and status bar, centers content at 720px max; a floating (Liquid Glass) exit button appears on hover
+- **Focus mode** (`⌘⇧F`) — hides the sidebar, toolbar items, tabs, and status bar, and keeps your content alignment, width, and margin; a floating (Liquid Glass) exit button appears on hover
 - **Status bar** — word count, character count, reading time, layout, zoom, detected encoding
 - **Zoom** — `⌘+` / `⌘−` / `⌘0`, pinch-to-zoom trackpad gesture
 - **Themes** — System / Light / Dark application appearance, with separate menus for the light and dark document theme: a **System** theme (the default) built from macOS's own colors (text background, labels, separators, your accent color for headings and links), plus 102 light and 249 dark Base16 palettes

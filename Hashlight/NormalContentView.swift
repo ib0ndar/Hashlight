@@ -1,7 +1,7 @@
 import SwiftUI
 
 /// The split view's detail column while documents are open: the tab strip, the preview, the
-/// status bar, and the window toolbar with Find. Focus mode keeps only the centered preview.
+/// status bar, and the window toolbar with Find. Focus mode keeps only the preview.
 struct NormalContentView: View {
     @EnvironmentObject private var documentManager: DocumentManager
     @EnvironmentObject private var settings: SettingsManager
@@ -31,14 +31,12 @@ struct NormalContentView: View {
                     .transition(Motion.slideOrFade(edge: .top))
             }
 
-            if isFocusMode {
-                // The scroll view runs under the transparent title bar; AppKit insets its
-                // content for the bar and applies the scroll edge effect there.
-                FocusModeContentView(selectedHeadingId: $selectedHeadingId)
-                    .ignoresSafeArea(.container, edges: .top)
-            } else {
-                DocumentViewModeContent(document: document, selectedHeadingId: $selectedHeadingId)
-            }
+            // Focus mode shows the same preview, with the reader's alignment, width, and margin;
+            // its scroll view runs under the transparent title bar, where AppKit insets its
+            // content for the bar and applies the scroll edge effect. One view for both modes
+            // keeps the preview (and its scroll position) when focus mode toggles.
+            DocumentViewModeContent(document: document, selectedHeadingId: $selectedHeadingId)
+                .ignoresSafeArea(.container, edges: isFocusMode ? .top : [])
         }
         .modifier(StatusBarPlacement(isShown: !isFocusMode, documentManager: documentManager, settings: settings))
         .animation(Motion.standard, value: showsTabBar)

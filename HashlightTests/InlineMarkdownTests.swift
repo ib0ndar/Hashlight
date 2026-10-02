@@ -525,7 +525,7 @@ nonisolated final class ContentAlignmentTests: XCTestCase {
     }
 
     func testNarrowPaneCollapsesEveryAlignmentToTheLeftMargin() {
-        // No free space (split panes, Focus Mode's 720pt column): the column must never be
+        // No free space (a narrow window): the column must never be
         // pushed off-screen or lose its leading margin, whatever the setting.
         for width in [300, 720, 899, 900] as [CGFloat] {
             for alignment in SettingsManager.ContentAlignment.allCases {
@@ -544,7 +544,7 @@ nonisolated final class ContentAlignmentTests: XCTestCase {
 /// Column-width math for the Content Width setting (`PreviewTextView.columnWidth`).
 nonisolated final class ContentWidthTests: XCTestCase {
     func testColumnNeverExceedsThePane() {
-        // Regression: the column was a hard 800pt, so a 720pt pane (Focus Mode) laid text out
+        // Regression: the column was a hard 800pt, so a 720pt pane (Focus Mode, back then) laid text out
         // to x=847 and silently clipped ~127pt off the right edge of every line.
         XCTAssertEqual(PreviewTextView.columnWidth(preferred: 800, viewWidth: 720, inset: 50), 620)
         XCTAssertEqual(PreviewTextView.columnWidth(preferred: 1000, viewWidth: 600, inset: 50), 500)
